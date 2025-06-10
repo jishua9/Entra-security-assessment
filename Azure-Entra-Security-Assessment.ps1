@@ -750,100 +750,235 @@ function Test-SignInLogs {
     }
 }
 
+function Calculate-RiskScore {
+    $totalFindings = $script:AssessmentResults.Critical.Count + $script:AssessmentResults.High.Count + 
+                    $script:AssessmentResults.Medium.Count + $script:AssessmentResults.Low.Count
+    
+    if ($totalFindings -eq 0) {
+        return @{ Score = 100; Level = "EXCELLENT" }
+    }
+    
+    # Weighted scoring: Critical = 25 points, High = 15, Medium = 8, Low = 3
+    $totalDeductions = ($script:AssessmentResults.Critical.Count * 25) + 
+                      ($script:AssessmentResults.High.Count * 15) + 
+                      ($script:AssessmentResults.Medium.Count * 8) + 
+                      ($script:AssessmentResults.Low.Count * 3)
+    
+    $score = [Math]::Max(0, 100 - $totalDeductions)
+    
+    $level = if ($score -ge 90) { "EXCELLENT" }
+            elseif ($score -ge 75) { "GOOD" }
+            elseif ($score -ge 60) { "FAIR" }
+            elseif ($score -ge 40) { "POOR" }
+            else { "CRITICAL" }
+    
+    return @{ Score = $score; Level = $level }
+}
+
+function Generate-KeyInsights {
+    $insights = @()
+    $totalUsers = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "MFA" -and $_.Finding -like "*Total active users*" }).Finding
+    $totalApps = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "Applications" -and $_.Finding -like "*application registrations found*" }).Finding
+    $totalDevices = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "Devices" -and $_.Finding -like "*devices registered*" }).Finding
+    $totalPolicies = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "Conditional Access" -and $_.Finding -like "*Conditional Access policies found*" }).Finding
+    
+    if ($totalUsers) {
+        $userCount = ($totalUsers -split ': ')[1]
+        $insights += "<div class='insight-item'><div class='insight-value'>$userCount</div><div class='insight-label'>Active Users</div></div>"
+    }
+    
+    if ($totalApps) {
+        $appCount = ($totalApps -split ' ')[0]
+        $insights += "<div class='insight-item'><div class='insight-value'>$appCount</div><div class='insight-label'>Applications</div></div>"
+    }
+    
+    if ($totalDevices) {
+        $deviceCount = ($totalDevices -split ' ')[0]
+        $insights += "<div class='insight-item'><div class='insight-value'>$deviceCount</div><div class='insight-label'>Registered Devices</div></div>"
+    }
+    
+    if ($totalPolicies) {
+        $policyCount = ($totalPolicies -split ' ')[0]
+        $insights += "<div class='insight-item'><div class='insight-value'>$policyCount</div><div class='insight-label'>CA Policies</div></div>"
+    }
+    
+    return $insights -join "`n"
+}
+
+function Generate-RemediationActions {
+    param($Finding)
+    
+    $actions = @()
+    
+    # Add specific PowerShell commands based on finding type
+    switch -Wildcard ($Finding.Finding) {
+        "*Security Defaults are disabled*" {
+            $actions += "# Enable Security Defaults`nUpdate-MgPolicyIdentitySecurityDefaultEnforcementPolicy -IsEnabled `$true"
+        }
+        "*No Conditional Access policies*" {
+            $actions += "# Create a basic MFA policy via Azure Portal`n# Navigate to: Azure AD > Security > Conditional Access > New Policy"
+        }
+        "*expired secrets*" {
+            $actions += "# Find applications with expired secrets`nGet-MgApplication | Where-Object { `$_.PasswordCredentials.EndDateTime -lt (Get-Date) }"
+        }
+        "*stale devices*" {
+            $actions += "# Remove stale devices (>90 days inactive)`nGet-MgDevice | Where-Object { `$_.ApproximateLastSignInDateTime -lt (Get-Date).AddDays(-90) } | Remove-MgDevice"
+        }
+        "*legacy authentication*" {
+            $actions += "# Block legacy authentication via Conditional Access`n# Create CA policy targeting legacy authentication protocols"
+        }
+    }
+    
+    return $actions -join "`n"
+}
+
 function Generate-HtmlReport {
     param([string]$OutputPath)
     
-    Write-Host "`n=== Generating HTML Report ===" -ForegroundColor Cyan
+    Write-Host "`n=== Generating Enhanced HTML Report ===" -ForegroundColor Cyan
     
+    # Check if template exists
+    $templatePath = ".\report-template.html"
+    if (!(Test-Path $templatePath)) {
+        Write-Warning "Template file not found at $templatePath. Using basic template."
+        Generate-BasicHtmlReport -OutputPath $OutputPath
+        return
+    }
+    
+    # Read template
+    $template = Get-Content $templatePath -Raw
+    
+    # Calculate risk score
+    $riskData = Calculate-RiskScore
+    
+    # Generate insights
+    $insights = Generate-KeyInsights
+    
+    # Generate findings content
+    $findingsContent = ""
+    
+    foreach ($severity in @('Critical', 'High', 'Medium', 'Low', 'Good', 'Info')) {
+        if ($script:AssessmentResults[$severity].Count -gt 0) {
+            $sectionId = "section-$($severity.ToLower())"
+            $findingsContent += @"
+            <div class="findings-section">
+                <div class="section-header" data-section="$sectionId" data-severity="$severity" onclick="toggleSection('$sectionId')">
+                    <div>
+                        <span class="section-title">$severity Priority Findings</span>
+                    </div>
+                    <div>
+                        <span class="section-count">$($script:AssessmentResults[$severity].Count)</span>
+                        <span class="expand-icon">▶</span>
+                    </div>
+                </div>
+                <div class="section-content" id="$sectionId">
+"@
+            
+            foreach ($finding in $script:AssessmentResults[$severity]) {
+                $remediationActions = Generate-RemediationActions -Finding $finding
+                
+                $findingsContent += @"
+                <div class="finding $($severity.ToLower())" style="border-left-color: $(
+                    switch ($severity) {
+                        'Critical' { '#e74c3c' }
+                        'High' { '#e91e63' }
+                        'Medium' { '#f39c12' }
+                        'Low' { '#3498db' }
+                        'Good' { '#27ae60' }
+                        'Info' { '#6c757d' }
+                    }
+                );">
+                    <div class="finding-header">
+                        <span class="severity-badge $($severity.ToLower())">$severity</span>
+                    </div>
+                    <div class="finding-title">$($finding.Category): $($finding.Finding)</div>
+"@
+                
+                if ($finding.Recommendation) {
+                    $findingsContent += @"
+                    <div class="recommendation">
+                        <div class="recommendation-title">💡 Recommendation</div>
+                        $($finding.Recommendation)
+                    </div>
+"@
+                }
+                
+                if ($finding.Details) {
+                    $findingsContent += "<div class='details'>ℹ️ $($finding.Details)</div>"
+                }
+                
+                if ($remediationActions) {
+                    $findingsContent += @"
+                    <div class="remediation-actions">
+                        <div class="remediation-title">🔧 Remediation Actions</div>
+                        <div class="powershell-command">$remediationActions</div>
+                    </div>
+"@
+                }
+                
+                $findingsContent += "</div>"
+            }
+            
+            $findingsContent += "</div></div>"
+        }
+    }
+    
+    # Replace template placeholders
+    $html = $template -replace '{{TIMESTAMP}}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    $html = $html -replace '{{RISK_SCORE}}', $riskData.Score
+    $html = $html -replace '{{RISK_LEVEL}}', $riskData.Level
+    $html = $html -replace '{{CRITICAL_COUNT}}', $script:AssessmentResults.Critical.Count
+    $html = $html -replace '{{HIGH_COUNT}}', $script:AssessmentResults.High.Count
+    $html = $html -replace '{{MEDIUM_COUNT}}', $script:AssessmentResults.Medium.Count
+    $html = $html -replace '{{LOW_COUNT}}', $script:AssessmentResults.Low.Count
+    $html = $html -replace '{{GOOD_COUNT}}', $script:AssessmentResults.Good.Count
+    $html = $html -replace '{{INSIGHTS_CONTENT}}', $insights
+    $html = $html -replace '{{FINDINGS_CONTENT}}', $findingsContent
+    
+    # Write to file
+    $html | Out-File -FilePath $OutputPath -Encoding UTF8
+    Write-Host "Enhanced HTML report generated: $OutputPath" -ForegroundColor Green
+    Write-Host "Features: Interactive charts, risk scoring, remediation actions, export options" -ForegroundColor Gray
+}
+
+function Generate-BasicHtmlReport {
+    param([string]$OutputPath)
+    
+    # Fallback basic HTML if template is missing
     $html = @"
 <!DOCTYPE html>
 <html>
 <head>
     <title>Azure Entra Security Assessment Report</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f5f5f5; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 40px; background-color: #f5f5f5; }
         .container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .summary { background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }
         .finding { margin: 15px 0; padding: 15px; border-radius: 5px; border-left: 4px solid; }
         .critical { background-color: #f77468; border-color: #e74c3c; }
         .high { background-color: #f8a0a0; border-color: #e91e63; }
         .medium { background-color: #ebd481; border-color: #f39c12; }
-        .low { background-color: #b8e0ff; border-color: #218bd1; }
+        .low { background-color: #b8e0ff; border-color: #3498db; }
         .good { background-color: #7bdda5; border-color: #27ae60; }
-        .info { background-color: #f8f9fa; border-color: #6c757d; }
-        .severity { font-weight: bold; text-transform: uppercase; }
-        .recommendation { font-style: italic; color: #555; margin-top: 8px; }
-        .details { font-size: 0.9em; color: #666; margin-top: 5px; }
-        .stats { display: flex; justify-content: space-around; flex-wrap: wrap; }
-        .stat-box { text-align: center; padding: 15px; margin: 10px; border-radius: 5px; min-width: 120px; }
-        .timestamp { color: #7f8c8d; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Azure Entra Security Assessment Report</h1>
-        <div class="timestamp">Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</div>
-        
-        <div class="summary">
-            <h2>Executive Summary</h2>
-            <div class="stats">
-                <div class="stat-box critical">
-                    <h3>$($script:AssessmentResults.Critical.Count)</h3>
-                    <p>Critical Issues</p>
-                </div>
-                <div class="stat-box high">
-                    <h3>$($script:AssessmentResults.High.Count)</h3>
-                    <p>High Priority</p>
-                </div>
-                <div class="stat-box medium">
-                    <h3>$($script:AssessmentResults.Medium.Count)</h3>
-                    <p>Medium Priority</p>
-                </div>
-                <div class="stat-box low">
-                    <h3>$($script:AssessmentResults.Low.Count)</h3>
-                    <p>Low Priority</p>
-                </div>
-                <div class="stat-box good">
-                    <h3>$($script:AssessmentResults.Good.Count)</h3>
-                    <p>Good Practices</p>
-                </div>
-            </div>
-        </div>
+        <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
 "@
 
-    # Add findings by severity
     foreach ($severity in @('Critical', 'High', 'Medium', 'Low', 'Good', 'Info')) {
         if ($script:AssessmentResults[$severity].Count -gt 0) {
-            $html += "<h2>$severity Priority Findings</h2>`n"
-            
+            $html += "<h2>$severity Priority Findings ($($script:AssessmentResults[$severity].Count))</h2>"
             foreach ($finding in $script:AssessmentResults[$severity]) {
-                $html += "<div class='finding $($severity.ToLower())'>`n"
-                $html += "<div class='severity'>[$severity]</div>`n"
-                $html += "<strong>$($finding.Category):</strong> $($finding.Finding)`n"
-                
-                if ($finding.Recommendation) {
-                    $html += "<div class='recommendation'>Recommendation: $($finding.Recommendation)</div>`n"
-                }
-                
-                if ($finding.Details) {
-                    $html += "<div class='details'>Details: $($finding.Details)</div>`n"
-                }
-                
-                $html += "</div>`n"
+                $html += "<div class='finding $($severity.ToLower())'><strong>$($finding.Category):</strong> $($finding.Finding)</div>"
             }
         }
     }
 
-    $html += @"
-    </div>
-</body>
-</html>
-"@
-
+    $html += "</div></body></html>"
     $html | Out-File -FilePath $OutputPath -Encoding UTF8
-    Write-Host "HTML report generated: $OutputPath" -ForegroundColor Green
 }
 
 function Show-Summary {
