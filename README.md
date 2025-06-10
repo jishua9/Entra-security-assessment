@@ -4,23 +4,104 @@ A comprehensive PowerShell-based security assessment tool for Azure Entra (forme
 
 ## 🔍 What It Analyzes
 
-The tool performs comprehensive security assessments across multiple areas:
+The tool performs comprehensive security assessments across multiple areas using Microsoft Graph API and Azure PowerShell:
 
 ### **Security Policies & Controls**
-- **Security Defaults** - Baseline security enablement status
-- **Conditional Access Policies** - MFA enforcement, device compliance, policy coverage
-- **Password Policies** - Authentication method policies and password protection
-- **Identity Protection** - Risk users, risk events, and threat detection
+
+#### **1. Security Defaults** 
+- **Endpoint:** `GET /policies/identitySecurityDefaultsEnforcementPolicy`
+- **PowerShell:** `Get-MgPolicyIdentitySecurityDefaultEnforcementPolicy`
+- **Checks:** 
+  - Whether Security Defaults are enabled or disabled
+  - Impact on baseline security posture
+  - Compatibility with Conditional Access policies
+
+#### **2. Conditional Access Policies**
+- **Endpoint:** `GET /identity/conditionalAccess/policies`
+- **PowerShell:** `Get-MgIdentityConditionalAccessPolicy`
+- **Checks:**
+  - Total number of Conditional Access policies
+  - Enabled vs disabled policy count
+  - MFA enforcement through grant controls (`mfa` requirement)
+  - Device compliance requirements (`compliantDevice` control)
+  - Policy coverage and gaps
+
+#### **3. Password Policies**
+- **Endpoints:** 
+  - `GET /domains` 
+  - `GET /organization`
+  - `GET /policies/authenticationMethodsPolicy`
+- **PowerShell:** `Get-MgDomain`, `Get-MgOrganization`, `Get-MgPolicyAuthenticationMethodPolicy`
+- **Checks:**
+  - Authentication methods policy version (v1 vs v2)
+  - Password validation policies
+  - On-premises password protection configuration
+
+#### **4. Identity Protection**
+- **Endpoints:**
+  - `GET /identityProtection/riskyUsers`
+  - `GET /identityProtection/riskDetections`
+- **PowerShell:** `Get-MgIdentityProtectionRiskyUser`, `Get-MgIdentityProtectionRiskDetection`
+- **Checks:**
+  - High-risk users requiring immediate attention
+  - Recent risk detections and events
+  - Risk-based policy effectiveness
+  - **Requires:** Azure AD Premium P2 license
 
 ### **Access Management**
-- **Privileged Role Assignments** - Admin role membership and distribution
-- **Guest User Settings** - External collaboration security controls
-- **Multi-Factor Authentication** - MFA adoption rates and configuration
+
+#### **5. Privileged Role Assignments**
+- **Endpoints:**
+  - `GET /directoryRoles`
+  - `GET /directoryRoles/{id}/members`
+- **PowerShell:** `Get-MgDirectoryRole`, `Get-MgDirectoryRoleMember`
+- **Analyzes Roles:**
+  - Global Administrator
+  - Privileged Role Administrator
+  - User Administrator
+  - Security Administrator
+  - Conditional Access Administrator
+  - Exchange Administrator
+  - SharePoint Administrator
+  - Application Administrator
+- **Checks:**
+  - Member count per privileged role
+  - Over-privileged accounts (>5 members)
+  - Under-privileged roles (0 members - break-glass concern)
+
+#### **6. Guest User Settings**
+- **Endpoints:**
+  - `GET /organization`
+  - `GET /policies/authorizationPolicy`
+- **PowerShell:** `Get-MgOrganization`, `Get-MgPolicyAuthorizationPolicy`
+- **Checks:**
+  - Guest user application creation permissions (`allowedToCreateApps`)
+  - Guest user security group creation (`allowedToCreateSecurityGroups`)
+  - Guest invitation restrictions (`allowInvitesFrom`)
+  - External collaboration settings
+
+#### **7. Multi-Factor Authentication**
+- **Endpoints:**
+  - `GET /users`
+  - `GET /users/{id}/authentication/methods`
+- **PowerShell:** `Get-MgUser`, `Get-MgUserAuthenticationMethod`
+- **Checks:**
+  - MFA adoption rate across active users
+  - Authentication method diversity (beyond password)
+  - Sampling methodology for large tenants (100 user sample)
+  - Total active user count
 
 ### **Compliance & Governance**
-- **Device Management** - Compliance policy enforcement
-- **Application Permissions** - App registration security
-- **Directory Settings** - Tenant-wide security configurations
+
+#### **8. Tenant Configuration**
+- **Endpoints:**
+  - `GET /organization`
+  - `GET /domains`
+- **PowerShell:** `Get-MgOrganization`, `Get-MgDomain`
+- **Checks:**
+  - Tenant-wide security settings
+  - Domain validation and configuration
+  - Directory synchronization status
 
 ## 🚀 Quick Start
 
@@ -70,6 +151,35 @@ The tool uses **device authentication** for secure, interactive login:
 - Color-coded findings during execution
 - Summary statistics at completion
 
+## 🎯 Security Assessment Criteria
+
+### **Critical Issues** 🔴
+- **No privileged role members** - Risk of tenant lockout
+- **No break-glass accounts** - Recovery access concerns
+
+### **High Priority Issues** 🟣
+- **No Conditional Access policies** - Missing modern authentication controls
+- **No MFA enforcement policies** - Weak authentication security
+- **0% MFA adoption** - Users without multi-factor authentication
+- **High-risk users unaddressed** - Active security threats
+
+### **Medium Priority Issues** 🟡
+- **Security Defaults disabled** - Without compensating Conditional Access
+- **Excessive privileged accounts** - More than 5 members in admin roles
+- **Permissive guest settings** - Guests can create apps/groups
+- **Mixed authentication policy versions** - Using legacy v1 policies
+
+### **Low Priority Issues** 🔵
+- **Missing policy optimization** - Opportunities for improvement
+- **Limited feature access** - Premium license features unavailable
+
+### **Good Practices** 🟢
+- **MFA adoption >90%** - Strong authentication coverage
+- **Conditional Access implemented** - Modern access controls
+- **Appropriate role assignments** - Well-managed privileged access
+- **Security Defaults enabled** - Or compensating Conditional Access
+- **Guest access controlled** - Restricted external collaboration
+
 ## 🔧 Prerequisites
 
 ### **PowerShell Modules**
@@ -80,11 +190,21 @@ The tool automatically installs these modules if missing:
 
 ### **Permissions Required**
 The tool requests these **read-only** permissions:
-- `Directory.Read.All` - Read directory data
-- `Policy.Read.All` - Read policies and conditional access
-- `UserAuthenticationMethod.Read.All` - Read MFA settings
-- `IdentityRiskEvent.Read.All` - Read identity protection data
-- `RoleManagement.Read.All` - Read role assignments
+
+| Permission | Usage | Assessment Areas |
+|------------|--------|------------------|
+| `Directory.Read.All` | Read directory objects, users, groups | User enumeration, directory roles, organization settings |
+| `Policy.Read.All` | Read authentication and authorization policies | Conditional Access, Security Defaults, Authorization policies |
+| `UserAuthenticationMethod.Read.All` | Read user MFA methods | MFA adoption analysis, authentication method diversity |
+| `IdentityRiskEvent.Read.All` | Read identity protection risk events | Risk detection, risky user identification |
+| `IdentityRiskyUser.Read.All` | Read risky user data | High-risk user assessment |
+| `RoleManagement.Read.All` | Read role assignments and definitions | Privileged role membership analysis |
+| `DeviceManagementConfiguration.Read.All` | Read device management policies | Device compliance requirements |
+| `User.Read.All` | Read user profiles | Active user enumeration, account status |
+| `Group.Read.All` | Read group information | Group membership and management settings |
+
+### **Admin Consent Required**
+Most permissions require **admin consent** as they access tenant-wide security data. The tool uses application permissions (not delegated) for comprehensive assessment.
 
 ### **License Requirements**
 - **Basic features**: Available with any Azure AD license
