@@ -173,7 +173,6 @@ function Connect-ToAzureServices {
         Write-Host "Connecting to Azure..." -ForegroundColor Yellow
         Write-Host "A browser window will open for authentication..." -ForegroundColor Gray
         
-        # Use browser authentication instead of device code for better reliability
         $azContext = Connect-AzAccount -ErrorAction Stop
         Write-Host "Connected to Azure as $($azContext.Context.Account.Id)" -ForegroundColor Green
         
@@ -472,11 +471,11 @@ function Generate-HtmlReport {
         h2 { color: #34495e; margin-top: 30px; }
         .summary { background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }
         .finding { margin: 15px 0; padding: 15px; border-radius: 5px; border-left: 4px solid; }
-        .critical { background-color: #fadbd8; border-color: #e74c3c; }
-        .high { background-color: #fdeaea; border-color: #e91e63; }
-        .medium { background-color: #fef9e7; border-color: #f39c12; }
-        .low { background-color: #eaf2f8; border-color: #3498db; }
-        .good { background-color: #eafaf1; border-color: #27ae60; }
+        .critical { background-color: #f77468; border-color: #e74c3c; }
+        .high { background-color: #f8a0a0; border-color: #e91e63; }
+        .medium { background-color: #ebd481; border-color: #f39c12; }
+        .low { background-color: #b8e0ff; border-color: #218bd1; }
+        .good { background-color: #7bdda5; border-color: #27ae60; }
         .info { background-color: #f8f9fa; border-color: #6c757d; }
         .severity { font-weight: bold; text-transform: uppercase; }
         .recommendation { font-style: italic; color: #555; margin-top: 8px; }
