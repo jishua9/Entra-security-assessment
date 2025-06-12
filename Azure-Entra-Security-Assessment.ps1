@@ -962,7 +962,7 @@ function Generate-TopRecommendations {
     # Sort by priority (highest impact first, then by severity)
     $topFindings = $actionableFindings | Sort-Object Priority, { $scoreImpacts[$_.Severity] } -Descending | Select-Object -First 5
     
-    # Generate HTML for top recommendations
+    # Generate HTML for top recommendations with detailed content
     $recommendationsHtml = @()
     foreach ($item in $topFindings) {
         $severityClass = $item.Severity.ToLower()
@@ -973,12 +973,18 @@ function Generate-TopRecommendations {
             'Low' { 'LOW' }
         }
         
+        $detailedInfo = Get-DetailedRecommendation -Finding $item.Finding
+        
         $recommendationsHtml += @"
                         <div class="recommendation-item">
                             <div class="rec-priority $severityClass">$severityLabel</div>
                             <div class="rec-text">
                                 $($item.ShortRecommendation)
+                                <span class="rec-expand-icon">▶</span>
                                 <div class="score-impact">+$($item.Impact) points</div>
+                                <div class="rec-details">
+                                    $detailedInfo
+                                </div>
                             </div>
                         </div>
 "@
@@ -1075,6 +1081,124 @@ function Get-FindingPriority {
     }
     
     return $basePriority + $priorityBoost
+}
+
+function Get-DetailedRecommendation {
+    param($Finding)
+    
+    # Generate detailed recommendations with step-by-step instructions
+    $details = switch -Wildcard ($Finding.Finding) {
+        "*MFA*configured*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Multi-Factor Authentication (MFA) is your strongest defense against credential-based attacks. Even if passwords are compromised, MFA prevents unauthorized access.</p>
+<h5>How to Fix</h5>
+<p>1. Navigate to Azure Portal > Azure Active Directory > Security > Conditional Access</p>
+<p>2. Create a new policy requiring MFA for all users</p>
+<p>3. Test with pilot group first, then roll out organization-wide</p>
+<code>New-MgIdentityConditionalAccessPolicy -DisplayName "Require MFA for All Users"</code>
+"@
+        }
+        "*Security Defaults are disabled*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Security Defaults provide baseline security for tenants without Conditional Access policies. They enforce MFA and block legacy authentication.</p>
+<h5>How to Fix</h5>
+<p>1. If you have Conditional Access policies, ensure they cover MFA requirements</p>
+<p>2. Otherwise, enable Security Defaults in Azure Portal > Azure Active Directory > Properties</p>
+<code>Update-MgPolicyIdentitySecurityDefaultEnforcementPolicy -IsEnabled `$true</code>
+"@
+        }
+        "*Exchange Administrator has no members*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Break-glass admin accounts ensure you can maintain access to critical services during emergencies or when primary admins are unavailable.</p>
+<h5>How to Fix</h5>
+<p>1. Create a dedicated break-glass account (e.g., breakglass@domain.com)</p>
+<p>2. Assign it to Exchange Administrator role</p>
+<p>3. Store credentials securely and document emergency procedures</p>
+<code>New-MgDirectoryRoleMember -DirectoryRoleId (Get-MgDirectoryRole -Filter "DisplayName eq 'Exchange Administrator'").Id -Id (Get-MgUser -Filter "DisplayName eq 'BreakGlass'").Id</code>
+"@
+        }
+        "*Global Administrator has*members*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Too many Global Administrators increases your attack surface. Each additional GA represents a potential security risk if compromised.</p>
+<h5>How to Fix</h5>
+<p>1. Review current Global Administrator assignments</p>
+<p>2. Assign users to least-privilege roles instead (User Admin, Security Admin, etc.)</p>
+<p>3. Keep only 2-4 Global Administrators for break-glass scenarios</p>
+<code>Get-MgDirectoryRoleMember -DirectoryRoleId (Get-MgDirectoryRole -Filter "DisplayName eq 'Global Administrator'").Id</code>
+"@
+        }
+        "*Guest users can create*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Guest users with excessive permissions can create security risks and compliance issues in your tenant.</p>
+<h5>How to Fix</h5>
+<p>1. Navigate to Azure Portal > Azure Active Directory > External Identities > External collaboration settings</p>
+<p>2. Restrict guest user permissions to "Guest users have limited access to properties and memberships"</p>
+<p>3. Review and update guest user access policies</p>
+<code>Update-MgPolicyAuthorizationPolicy -AllowedToCreateApps `$false -AllowedToCreateSecurityGroups `$false</code>
+"@
+        }
+        "*applications have no assigned owners*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Orphaned applications create security risks and compliance issues. Without owners, these apps may have excessive permissions or expired credentials.</p>
+<h5>How to Fix</h5>
+<p>1. Review all application registrations in Azure Portal > App registrations</p>
+<p>2. Assign owners to each application</p>
+<p>3. Review and clean up unused applications</p>
+<code>Get-MgApplication | Where-Object { (Get-MgApplicationOwner -ApplicationId `$_.Id).Count -eq 0 }</code>
+"@
+        }
+        "*expired*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Expired application credentials can cause service disruptions and security vulnerabilities. Applications may fail to authenticate properly.</p>
+<h5>How to Fix</h5>
+<p>1. Identify applications with expired credentials</p>
+<p>2. Generate new client secrets or certificates</p>
+<p>3. Update application configurations with new credentials</p>
+<code>Get-MgApplication | Where-Object { `$_.PasswordCredentials.EndDateTime -lt (Get-Date) }</code>
+"@
+        }
+        "*legacy authentication*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Legacy authentication protocols bypass modern security controls like MFA, making them a major security risk.</p>
+<h5>How to Fix</h5>
+<p>1. Create a Conditional Access policy to block legacy authentication</p>
+<p>2. Target "Exchange ActiveSync clients" and "Other clients"</p>
+<p>3. Monitor sign-in logs to ensure no disruption to legitimate services</p>
+<code># Create CA policy to block legacy authentication via Azure Portal</code>
+"@
+        }
+        "*failed sign-ins*" {
+            @"
+<h5>Why This Matters</h5>
+<p>High failure rates may indicate brute force attacks, misconfigured applications, or user experience issues that need attention.</p>
+<h5>How to Fix</h5>
+<p>1. Analyze sign-in logs to identify failure patterns</p>
+<p>2. Look for repeated failures from same IPs or users</p>
+<p>3. Implement account lockout policies if needed</p>
+<code>Get-MgAuditLogSignIn -Filter "status/errorCode ne 0" -Top 100</code>
+"@
+        }
+        default {
+            @"
+<h5>Additional Information</h5>
+<p>Review the detailed findings in the tables below for specific remediation steps.</p>
+<h5>General Best Practices</h5>
+<p>• Regularly review security settings and policies</p>
+<p>• Implement least-privilege access principles</p>
+<p>• Monitor audit logs for suspicious activity</p>
+"@
+        }
+    }
+    
+    return $details
 }
 
 function Generate-RemediationActions {
@@ -1223,6 +1347,7 @@ function Generate-HtmlReport {
     
     # Replace template placeholders
     $html = $template -replace '{{TIMESTAMP}}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    $html = $html -replace '{{TENANT_NAME}}', $tenantName
     $html = $html -replace '{{RISK_SCORE}}', $riskData.Score
     $html = $html -replace '{{RISK_LEVEL}}', $riskData.Level
     $html = $html -replace '{{CRITICAL_COUNT}}', $script:AssessmentResults.Critical.Count

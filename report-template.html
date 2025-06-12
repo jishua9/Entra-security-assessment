@@ -379,6 +379,7 @@
             color: #e2e8f0;
             line-height: 1.4;
             flex: 1;
+            cursor: pointer;
         }
 
         .score-impact {
@@ -386,6 +387,69 @@
             color: #10b981;
             font-weight: 600;
             margin-top: 2px;
+        }
+
+        .rec-details {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(71, 85, 105, 0.4);
+            display: none;
+        }
+
+        .rec-details.expanded {
+            display: block;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 200px;
+            }
+        }
+
+        .rec-details h5 {
+            color: #fb923c;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .rec-details p {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+
+        .rec-details code {
+            background-color: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(71, 85, 105, 0.4);
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 10px;
+            color: #10b981;
+            display: block;
+            margin: 6px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: nowrap;
+            overflow-x: auto;
+        }
+
+        .rec-expand-icon {
+            font-size: 10px;
+            color: #64748b;
+            margin-left: 8px;
+            transition: transform 0.2s ease;
+        }
+
+        .rec-expand-icon.rotated {
+            transform: rotate(90deg);
         }
 
         @media (max-width: 768px) {
@@ -522,6 +586,28 @@
             content.classList.toggle('expanded');
             icon.classList.toggle('rotated');
         }
+
+        // Toggle recommendation details
+        function toggleRecommendation(element) {
+            const details = element.parentElement.querySelector('.rec-details');
+            const icon = element.querySelector('.rec-expand-icon');
+            
+            if (details) {
+                details.classList.toggle('expanded');
+                if (icon) {
+                    icon.classList.toggle('rotated');
+                }
+            }
+        }
+
+        // Add click handlers to recommendations when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.rec-text').forEach(element => {
+                element.addEventListener('click', function() {
+                    toggleRecommendation(this);
+                });
+            });
+        });
 
         // Export Functions
         function exportToPDF() {
