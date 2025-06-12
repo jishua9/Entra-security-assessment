@@ -1,6 +1,32 @@
 # Azure Entra Security Assessment Tool
 
-A comprehensive PowerShell-based security assessment tool for Azure Entra (formerly Azure AD) tenants. This tool analyzes various security settings, policies, and configurations to provide a detailed health report on your organization's identity and access management security posture.
+A comprehensive PowerShell-based security assessment tool for Azure Entra (formerly Azure AD) tenants. This tool analyzes various security settings, policies, and configurations to provide a detailed interactive health report with **smart recommendations** and **score-based impact analysis**.
+
+## ✨ Key Features
+
+### **🎯 Interactive Top Priority Actions**
+- **Dynamic recommendations** based on your specific findings
+- **Score impact calculation** (+4, +8, +12 points per fix)
+- **Expandable detailed guidance** with step-by-step instructions
+- **PowerShell commands** ready to copy and execute
+- **Click-to-expand** interface for comprehensive remediation steps
+
+### **📊 Smart Security Scoring**
+- **Realistic scoring algorithm** (20-100 scale)
+- **Weighted impact assessment** (Critical: -12, High: -8, Medium: -4, Low: -2 points)
+- **Good practice bonuses** (+3 points each, max +20)
+- **Real-world adjustments** to prevent artificially low scores
+
+### **📁 Automatic File Naming**
+- **Tenant-specific filenames**: `CompanyName_Azure-Entra-Security-Report_2025-01-15.html`
+- **Date integration** for chronological organization
+- **Safe filename sanitization** for all environments
+
+### **🔧 Professional Interactive Reports**
+- **Expandable sections** for detailed findings
+- **Export capabilities** (PDF, CSV, Print)
+- **Modern responsive design** with dark theme
+- **Interactive charts** showing security posture
 
 ## 🔍 What It Analyzes
 
@@ -41,7 +67,7 @@ The tool performs comprehensive security assessments across multiple areas using
 - **Endpoints:**
   - `GET /identityProtection/riskyUsers`
   - `GET /identityProtection/riskDetections`
-- **PowerShell:** `Get-MgIdentityProtectionRiskyUser`, `Get-MgIdentityProtectionRiskDetection`
+- **PowerShell:** `Get-MgRiskyUser`, `Get-MgRiskDetection`
 - **Checks:**
   - High-risk users requiring immediate attention
   - Recent risk detections and events
@@ -91,9 +117,51 @@ The tool performs comprehensive security assessments across multiple areas using
   - Sampling methodology for large tenants (100 user sample)
   - Total active user count
 
+#### **8. Application Registrations**
+- **Endpoints:**
+  - `GET /applications`
+  - `GET /applications/{id}/owners`
+- **PowerShell:** `Get-MgApplication`, `Get-MgApplicationOwner`
+- **Checks:**
+  - Expired client secrets and certificates
+  - Applications without assigned owners
+  - Credential expiration monitoring (30-day window)
+  - Service continuity risks
+
+#### **9. Device Management**
+- **Endpoints:**
+  - `GET /devices`
+- **PowerShell:** `Get-MgDevice`
+- **Checks:**
+  - Device registration status
+  - Stale devices (>90 days inactive)
+  - Device compliance and management
+  - Directory hygiene
+
+#### **10. Named Locations**
+- **Endpoints:**
+  - `GET /identity/conditionalAccess/namedLocations`
+- **PowerShell:** `Get-MgIdentityConditionalAccessNamedLocation`
+- **Checks:**
+  - Configured trusted locations
+  - IP-based vs country-based locations
+  - Integration with Conditional Access policies
+  - Location-based security controls
+
+#### **11. Sign-in Analysis**
+- **Endpoints:**
+  - `GET /auditLogs/signIns`
+- **PowerShell:** `Get-MgAuditLogSignIn`
+- **Checks:**
+  - Failed sign-in patterns (last 7 days)
+  - Legacy authentication usage
+  - Geographic sign-in distribution
+  - Impossible travel detection
+  - **Requires:** Azure AD Premium license for detailed logs
+
 ### **Compliance & Governance**
 
-#### **8. Tenant Configuration**
+#### **12. Tenant Configuration**
 - **Endpoints:**
   - `GET /organization`
   - `GET /domains`
@@ -117,11 +185,14 @@ First, run the setup script to install required PowerShell modules:
 Execute the main assessment script:
 
 ```powershell
-# Basic assessment with HTML report
+# Basic assessment with automatic file naming
 .\Azure-Entra-Security-Assessment.ps1
 
-# Detailed output with custom report location
-.\Azure-Entra-Security-Assessment.ps1 -OutputPath ".\MyTenant-Security-Report.html" -DetailedOutput
+# Custom output path (overrides automatic naming)
+.\Azure-Entra-Security-Assessment.ps1 -OutputPath "C:\Reports\MyCustomReport.html"
+
+# Detailed console output
+.\Azure-Entra-Security-Assessment.ps1 -DetailedOutput
 ```
 
 ### **3. Interactive Authentication**
@@ -131,54 +202,78 @@ The tool uses **device authentication** for secure, interactive login:
 - Supports MFA and conditional access policies
 - Minimal permissions requested (read-only access)
 
-## 📊 Report Features
+### **4. Automatic File Naming**
+Reports are automatically named with tenant and date:
+```
+Contoso-Ltd_Azure-Entra-Security-Report_2025-01-15.html
+Microsoft-Corporation_Azure-Entra-Security-Report_2025-01-15.html
+```
+
+## 📊 Interactive Report Features
+
+### **🎯 Top Priority Actions**
+- **Smart recommendations** based on your specific security findings
+- **Score impact display** showing exact points gained per action
+- **Expandable details** with comprehensive remediation guidance
+- **Step-by-step instructions** for each recommendation
+- **Ready-to-use PowerShell commands** for implementation
+
+### **📈 Security Score Dashboard**
+- **Realistic scoring** from 20-100 (prevents artificially low scores)
+- **Visual score representation** with interactive doughnut chart
+- **Detailed breakdown** of score calculation methodology
+- **Risk level assessment** (Excellent, Good, Fair, Needs Improvement, Poor, Critical)
+
+### **🎨 Modern Interactive Interface**
+- **Dark theme** professional design
+- **Expandable finding tables** (auto-expand for Critical/High severity)
+- **Interactive charts** powered by Chart.js
+- **Export functionality** (PDF, CSV, Print)
+- **Responsive design** for desktop and mobile viewing
 
 ### **Color-Coded Severity Levels**
-- 🔴 **Critical** - Immediate action required
-- 🟣 **High** - High priority security concerns  
-- 🟡 **Medium** - Recommended improvements
-- 🔵 **Low** - Minor optimizations
-- 🟢 **Good** - Security best practices followed
+- 🔴 **Critical** - Immediate action required (-12 points each)
+- 🟣 **High** - High priority security concerns (-8 points each)
+- 🟡 **Medium** - Recommended improvements (-4 points each)
+- 🔵 **Low** - Minor optimizations (-2 points each)
+- 🟢 **Good** - Security best practices followed (+3 points each, max +20)
 
-### **Comprehensive HTML Report**
-- Executive summary with issue counts
-- Detailed findings with recommendations
-- Actionable remediation steps
-- Professional formatting for stakeholder review
+### **📋 Key Security Insights**
+- **Active Users** count
+- **Applications** registered
+- **Registered Devices** count
+- **Conditional Access Policies** deployed
 
-### **Console Output**
-- Real-time progress updates
-- Color-coded findings during execution
-- Summary statistics at completion
+## 🎯 Top Priority Actions Examples
 
-## 🎯 Security Assessment Criteria
+The tool generates dynamic recommendations based on your findings. Here are examples of what you might see:
 
-### **Critical Issues** 🔴
-- **No privileged role members** - Risk of tenant lockout
-- **No break-glass accounts** - Recovery access concerns
+### **🔐 Authentication & Access Control**
+- **Implement mandatory MFA for all users** (+8 points)
+- **Enable Security Defaults or expand CA policies** (+4 points)  
+- **Block legacy authentication protocols** (+8 points)
 
-### **High Priority Issues** 🟣
-- **No Conditional Access policies** - Missing modern authentication controls
-- **No MFA enforcement policies** - Weak authentication security
-- **0% MFA adoption** - Users without multi-factor authentication
-- **High-risk users unaddressed** - Active security threats
+### **👥 Privileged Access Management**
+- **Assign break-glass admin to Exchange Administrator role** (+8 points)
+- **Review 6 Global Administrator assignments** (+4 points)
 
-### **Medium Priority Issues** 🟡
-- **Security Defaults disabled** - Without compensating Conditional Access
-- **Excessive privileged accounts** - More than 5 members in admin roles
-- **Permissive guest settings** - Guests can create apps/groups
-- **Mixed authentication policy versions** - Using legacy v1 policies
+### **🏢 Guest User Security**
+- **Restrict guest user permissions** (+4 points)
+- **Restrict guest invitations to admins only** (+4 points)
 
-### **Low Priority Issues** 🔵
-- **Missing policy optimization** - Opportunities for improvement
-- **Limited feature access** - Premium license features unavailable
+### **📱 Application & Device Management**
+- **Assign owners to orphaned applications** (+4 points)
+- **Renew expired application credentials** (+12 points)
+- **Implement device registration and management** (+4 points)
 
-### **Good Practices** 🟢
-- **MFA adoption >90%** - Strong authentication coverage
-- **Conditional Access implemented** - Modern access controls
-- **Appropriate role assignments** - Well-managed privileged access
-- **Security Defaults enabled** - Or compensating Conditional Access
-- **Guest access controlled** - Restricted external collaboration
+### **📊 Monitoring & Analysis**
+- **Investigate failed sign-in patterns** (+4 points)
+- **Review and remediate risky user accounts** (+8 points)
+
+**Each recommendation includes:**
+- **Why This Matters** - Security impact explanation
+- **How to Fix** - Step-by-step Azure Portal instructions
+- **PowerShell Commands** - Ready-to-execute code snippets
 
 ## 🔧 Prerequisites
 
@@ -186,7 +281,14 @@ The tool uses **device authentication** for secure, interactive login:
 The tool automatically installs these modules if missing:
 - `Az.Accounts` - Azure authentication
 - `Az.Resources` - Azure resource management
-- `Microsoft.Graph.*` - Graph API access for identity data
+- `Microsoft.Graph.Authentication` - Graph API authentication
+- `Microsoft.Graph.Identity.SignIns` - Sign-in and Conditional Access data
+- `Microsoft.Graph.Identity.DirectoryManagement` - Directory and policy data
+- `Microsoft.Graph.Users` - User and authentication data
+- `Microsoft.Graph.Groups` - Group management data
+- `Microsoft.Graph.DeviceManagement` - Device compliance data
+- `Microsoft.Graph.Applications` - Application registration data
+- `Microsoft.Graph.Reports` - Audit and sign-in logs
 
 ### **Permissions Required**
 The tool requests these **read-only** permissions:
@@ -202,6 +304,9 @@ The tool requests these **read-only** permissions:
 | `DeviceManagementConfiguration.Read.All` | Read device management policies | Device compliance requirements |
 | `User.Read.All` | Read user profiles | Active user enumeration, account status |
 | `Group.Read.All` | Read group information | Group membership and management settings |
+| `Application.Read.All` | Read application registrations | App credential expiration, ownership |
+| `AuditLog.Read.All` | Read audit logs and sign-ins | Sign-in pattern analysis, legacy auth detection |
+| `Device.Read.All` | Read device information | Device registration and compliance status |
 
 ### **Admin Consent Required**
 Most permissions require **admin consent** as they access tenant-wide security data. The tool uses application permissions (not delegated) for comprehensive assessment.
@@ -210,38 +315,19 @@ Most permissions require **admin consent** as they access tenant-wide security d
 - **Basic features**: Available with any Azure AD license
 - **Identity Protection**: Requires Azure AD Premium P2
 - **Conditional Access**: Requires Azure AD Premium P1/P2
-
-## 🎯 Security Assessment Areas
-
-### **1. Authentication Security**
-- Multi-factor authentication adoption
-- Authentication method policies
-- Password protection settings
-- Security defaults configuration
-
-### **2. Access Control**
-- Conditional access policy coverage
-- Device compliance requirements
-- Location-based access controls
-- Application access policies
-
-### **3. Identity Governance**
-- Privileged role management
-- Guest user access controls
-- Group management policies
-- Application permissions
-
-### **4. Threat Protection**
-- Identity protection configuration
-- Risk-based policies
-- Suspicious activity detection
-- Automated remediation
+- **Detailed Sign-in Logs**: Requires Azure AD Premium P1/P2
 
 ## 🛠️ Advanced Usage
 
+### **Automatic File Naming (Default)**
+```powershell
+.\Azure-Entra-Security-Assessment.ps1
+# Generates: Contoso-Ltd_Azure-Entra-Security-Report_2025-01-15.html
+```
+
 ### **Custom Report Location**
 ```powershell
-.\Azure-Entra-Security-Assessment.ps1 -OutputPath "C:\Reports\Security-Assessment-$(Get-Date -Format 'yyyy-MM-dd').html"
+.\Azure-Entra-Security-Assessment.ps1 -OutputPath "C:\Reports\CustomName.html"
 ```
 
 ### **Detailed Console Output**
@@ -253,36 +339,61 @@ Most permissions require **admin consent** as they access tenant-wide security d
 Create a scheduled task for regular security assessments:
 
 ```powershell
-# Example: Weekly security assessment
+# Example: Weekly security assessment with automatic naming
 $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-File 'C:\Scripts\Azure-Entra-Security-Assessment.ps1'"
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 6AM
 Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "Weekly Azure Security Assessment"
 ```
 
-## 🔍 Understanding Results
+## 📊 Understanding the Security Score
 
-### **Critical Issues** 🔴
-- No MFA enforcement
-- Overprivileged accounts
-- Disabled security features
-- High-risk users unaddressed
+### **Scoring Methodology**
+- **Base Score**: 100 points
+- **Critical Issues**: -12 points each
+- **High Priority**: -8 points each  
+- **Medium Priority**: -4 points each
+- **Low Priority**: -2 points each
+- **Good Practices**: +3 points each (maximum +20 bonus)
+- **Minimum Score**: 20 (real-world adjustments applied)
 
-### **High Priority** 🟣
-- Weak conditional access coverage
-- Excessive guest permissions
-- Missing device compliance
-- Unmonitored privileged roles
+### **Risk Level Thresholds**
+- **85-100**: Excellent - Industry leading practices
+- **70-84**: Good - Strong security posture with minor gaps
+- **55-69**: Fair - Solid foundation with some improvements needed
+- **40-54**: Needs Improvement - Basic security with important gaps
+- **25-39**: Poor - Significant vulnerabilities require attention
+- **20-24**: Critical - Major security vulnerabilities need immediate action
 
-### **Medium Priority** 🟡
-- Suboptimal policy configuration
-- Limited security monitoring
-- Governance improvements needed
+### **Real-World Adjustments**
+- Environments with minimal findings get minimum 60 points
+- No critical issues + ≤2 high issues = minimum 50 points
+- Prevents artificially low scores that don't reflect actual risk
 
-### **Good Practices** 🟢
-- Proper MFA implementation
-- Well-configured conditional access
-- Appropriate role assignments
-- Active threat monitoring
+## 🔍 Interactive Report Navigation
+
+### **📊 Summary Dashboard**
+- **Security Score** with visual gauge and explanation
+- **Findings Summary** with color-coded counts
+- **Top Priority Actions** with expandable detailed guidance
+- **Key Security Insights** showing tenant metrics
+
+### **📋 Detailed Findings Tables**
+- **Auto-expand** Critical and High severity findings
+- **Click to expand** any severity level for full details
+- **Structured data** with Title, Severity, Warning, and Recommendations
+- **Search and filter** capabilities
+
+### **🎯 Interactive Recommendations**
+- **Click any recommendation** to expand detailed guidance
+- **"Why This Matters"** - Security impact explanation
+- **"How to Fix"** - Step-by-step remediation instructions
+- **PowerShell commands** - Copy-ready code snippets
+- **Score impact** - Exact points gained per action
+
+### **📤 Export Options**
+- **PDF Export** - Print-friendly report generation
+- **CSV Export** - Data analysis and tracking
+- **Print Report** - Professional document printing
 
 ## 🚨 Troubleshooting
 
@@ -293,17 +404,26 @@ Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "Weekly Azure
 # Run PowerShell as Administrator
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine
 Install-Module -Name Az -Force -AllowClobber
+Install-Module -Name Microsoft.Graph -Force -AllowClobber
 ```
 
 **Authentication Issues**
 - Ensure you have appropriate Azure AD permissions
 - Check if conditional access policies block the connection
 - Verify network connectivity to Azure services
+- Use an account with at least Security Reader role
 
 **Graph API Errors**
 - Some features require Azure AD Premium licenses
 - Check if the requesting account has sufficient permissions
 - Verify tenant settings allow the requested operations
+- Review the detailed error messages in console output
+
+**File Naming Issues**
+- Tool automatically sanitizes tenant names for safe filenames
+- Invalid characters are replaced with hyphens
+- Length is limited to 50 characters for compatibility
+- Falls back to "Unknown-Tenant" if tenant name unavailable
 
 ### **Corporate Network Considerations**
 ```powershell
@@ -315,21 +435,28 @@ Install-Module -Name Az -Force -AllowClobber
 
 ### **Regular Assessments**
 - Run monthly security assessments
-- Compare results over time
-- Track improvement progress
-- Document remediation efforts
+- Compare results over time using date-stamped reports
+- Track improvement progress with score changes
+- Document remediation efforts and timelines
 
 ### **Stakeholder Reporting**
-- Share HTML reports with security teams
+- Share interactive HTML reports with security teams
+- Use Top Priority Actions for executive summaries
 - Include in compliance documentation
-- Use for security awareness training
-- Support audit requirements
+- Export CSV data for trend analysis
 
 ### **Remediation Priorities**
-1. Address critical issues immediately
-2. Plan high-priority improvements
-3. Schedule medium-priority enhancements
-4. Monitor and maintain good practices
+1. **Critical Issues** - Address immediately (highest point impact)
+2. **High Priority** - Plan within 30 days
+3. **Medium Priority** - Schedule within 90 days
+4. **Low Priority** - Include in next maintenance cycle
+5. **Monitor Good Practices** - Maintain current standards
+
+### **Leveraging Interactive Features**
+- **Click through all recommendations** for comprehensive understanding
+- **Use PowerShell commands** provided in expanded sections
+- **Export reports** for offline analysis and archival
+- **Share specific findings** by expanding relevant sections
 
 ## 🔐 Security & Privacy
 
@@ -337,23 +464,25 @@ Install-Module -Name Az -Force -AllowClobber
 - **Interactive authentication** - Uses your credentials securely
 - **Local processing** - Assessment runs on your machine
 - **No data transmission** - Results stay in your environment
+- **Automatic file naming** - Includes tenant name for organization
 
 ## 📈 Continuous Improvement
 
-This tool is designed to evolve with Azure Entra security features. Regular updates will include:
-- New security assessment checks
-- Enhanced reporting capabilities
-- Support for additional policies
-- Improved recommendations
+This tool is designed to evolve with Azure Entra security features. Regular updates include:
+- **New security assessment checks** for emerging threats
+- **Enhanced interactive reporting** capabilities
+- **Improved scoring algorithms** based on real-world feedback
+- **Additional PowerShell automation** for remediation
+- **Extended analytics** and trend analysis features
 
 ## 🤝 Support
 
 For issues, questions, or feature requests:
-- Review the troubleshooting section
+- Review the troubleshooting section above
 - Check Azure documentation for specific policy guidance
-- Consult Microsoft security baselines
-- Engage with Azure security community
+- Consult Microsoft security baselines and best practices
+- Engage with Azure security community forums
 
 ---
 
-**⚠️ Important Note**: This tool provides security assessments and recommendations but should be used alongside comprehensive security planning and professional security advice. Always test changes in a non-production environment first. 
+**⚠️ Important Note**: This tool provides security assessments and recommendations but should be used alongside comprehensive security planning and professional security advice. Always test changes in a non-production environment first. The interactive recommendations include PowerShell commands - review and test these carefully before execution in production environments. 

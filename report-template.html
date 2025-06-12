@@ -328,6 +328,130 @@
             margin: 16px 0;
         }
 
+        .top-recommendations {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .recommendation-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 12px;
+            background-color: rgba(51, 65, 85, 0.4);
+            border-radius: 6px;
+            border-left: 2px solid transparent;
+        }
+
+        .recommendation-item:hover {
+            background-color: rgba(51, 65, 85, 0.6);
+        }
+
+        .rec-priority {
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-align: center;
+            min-width: 35px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .rec-priority.high {
+            background-color: #ea580c;
+            color: white;
+        }
+
+        .rec-priority.medium {
+            background-color: #d97706;
+            color: white;
+        }
+
+        .rec-priority.critical {
+            background-color: #dc2626;
+            color: white;
+        }
+
+        .rec-text {
+            font-size: 12px;
+            color: #e2e8f0;
+            line-height: 1.4;
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .score-impact {
+            font-size: 10px;
+            color: #10b981;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        .rec-details {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(71, 85, 105, 0.4);
+            display: none;
+        }
+
+        .rec-details.expanded {
+            display: block;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 200px;
+            }
+        }
+
+        .rec-details h5 {
+            color: #fb923c;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .rec-details p {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+
+        .rec-details code {
+            background-color: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(71, 85, 105, 0.4);
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 10px;
+            color: #10b981;
+            display: block;
+            margin: 6px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: nowrap;
+            overflow-x: auto;
+        }
+
+        .rec-expand-icon {
+            font-size: 10px;
+            color: #64748b;
+            margin-left: 8px;
+            transition: transform 0.2s ease;
+        }
+
+        .rec-expand-icon.rotated {
+            transform: rotate(90deg);
+        }
+
         @media (max-width: 768px) {
             .summary-section {
                 grid-template-columns: 1fr;
@@ -398,6 +522,13 @@
                         <div class="stat-label">Good</div>
                     </div>
                 </div>
+                
+                <div style="margin-top: 24px;">
+                    <h4 style="color: #fb923c; font-size: 14px; font-weight: 600; margin-bottom: 12px;">🎯 Top Priority Actions</h4>
+                    <div class="top-recommendations">
+                        {{TOP_RECOMMENDATIONS}}
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -455,6 +586,28 @@
             content.classList.toggle('expanded');
             icon.classList.toggle('rotated');
         }
+
+        // Toggle recommendation details
+        function toggleRecommendation(element) {
+            const details = element.parentElement.querySelector('.rec-details');
+            const icon = element.querySelector('.rec-expand-icon');
+            
+            if (details) {
+                details.classList.toggle('expanded');
+                if (icon) {
+                    icon.classList.toggle('rotated');
+                }
+            }
+        }
+
+        // Add click handlers to recommendations when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.rec-text').forEach(element => {
+                element.addEventListener('click', function() {
+                    toggleRecommendation(this);
+                });
+            });
+        });
 
         // Export Functions
         function exportToPDF() {

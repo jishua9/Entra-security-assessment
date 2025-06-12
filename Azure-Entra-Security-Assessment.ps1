@@ -14,7 +14,7 @@
 #>
 
 param(
-    [string]$OutputPath = ".\Azure-Entra-Security-Report.html",
+    [string]$OutputPath = "",
     [switch]$DetailedOutput
 )
 
@@ -182,6 +182,10 @@ function Connect-ToAzureServices {
         $tenantInfo = Get-AzTenant | Select-Object -First 1
         if ($tenantInfo) {
             Write-Host "Tenant: $($tenantInfo.Name) ($($tenantInfo.Id))" -ForegroundColor Green
+            
+            # Store tenant info globally for report generation
+            $script:TenantName = $tenantInfo.Name
+            $script:TenantId = $tenantInfo.Id
         }
         
     }
@@ -928,6 +932,279 @@ function Generate-KeyInsights {
     return $insights -join "`n"
 }
 
+function Generate-TopRecommendations {
+    Write-Host "Generating top priority recommendations..." -ForegroundColor Yellow
+    
+    # Define potential score impacts for different finding types
+    $scoreImpacts = @{
+        'Critical' = 12
+        'High' = 8
+        'Medium' = 4
+        'Low' = 2
+    }
+    
+    # Collect all actionable findings with their potential impact
+    $actionableFindings = @()
+    
+    foreach ($severity in @('Critical', 'High', 'Medium', 'Low')) {
+        foreach ($finding in $script:AssessmentResults[$severity]) {
+            $impact = $scoreImpacts[$severity]
+            $shortRecommendation = Get-ShortRecommendation -Finding $finding
+            
+            if ($shortRecommendation) {
+                $actionableFindings += @{
+                    Severity = $severity
+                    Finding = $finding
+                    Impact = $impact
+                    ShortRecommendation = $shortRecommendation
+                    Priority = Get-FindingPriority -Finding $finding -Severity $severity
+                }
+            }
+        }
+    }
+    
+    # Sort by priority (highest impact first, then by severity)
+    $topFindings = $actionableFindings | Sort-Object Priority, { $scoreImpacts[$_.Severity] } -Descending | Select-Object -First 5
+    
+    # Generate HTML for top recommendations with detailed content
+    $recommendationsHtml = @()
+    foreach ($item in $topFindings) {
+        $severityClass = $item.Severity.ToLower()
+        $severityLabel = switch ($item.Severity) {
+            'Critical' { 'CRIT' }
+            'High' { 'HIGH' }
+            'Medium' { 'MED' }
+            'Low' { 'LOW' }
+        }
+        
+        $detailedInfo = Get-DetailedRecommendation -Finding $item.Finding
+        
+        $recommendationsHtml += @"
+                        <div class="recommendation-item">
+                            <div class="rec-priority $severityClass">$severityLabel</div>
+                            <div class="rec-text">
+                                $($item.ShortRecommendation)
+                                <span class="rec-expand-icon">▶</span>
+                                <div class="score-impact">+$($item.Impact) points</div>
+                                <div class="rec-details">
+                                    $detailedInfo
+                                </div>
+                            </div>
+                        </div>
+"@
+    }
+    
+    if ($recommendationsHtml.Count -eq 0) {
+        return '<div class="recommendation-item"><div class="rec-priority good" style="background-color: #059669;">GOOD</div><div class="rec-text">No critical improvements identified<div class="score-impact">Maintain current practices</div></div></div>'
+    }
+    
+    return $recommendationsHtml -join "`n"
+}
+
+function Get-ShortRecommendation {
+    param($Finding)
+    
+    # Extract actionable short recommendations based on finding patterns
+    switch -Wildcard ($Finding.Finding) {
+        "*MFA*configured*" {
+            if ($Finding.Finding -like "*2.94%*" -or $Finding.Finding -match '\d+\.\d+%.*MFA') {
+                return "Implement mandatory MFA for all users (currently low adoption)"
+            }
+        }
+        "*Security Defaults are disabled*" {
+            return "Enable Security Defaults or expand Conditional Access policies"
+        }
+        "*Exchange Administrator has no members*" {
+            return "Assign break-glass admin to Exchange Administrator role"
+        }
+        "*Global Administrator has*members*" {
+            if ($Finding.Finding -match '(\d+) members') {
+                $count = $matches[1]
+                if ([int]$count -gt 5) {
+                    return "Review $count Global Administrator assignments"
+                }
+            }
+        }
+        "*Guest users can create*" {
+            return "Restrict guest user permissions"
+        }
+        "*All users can invite guests*" {
+            return "Restrict guest invitations to admins only"
+        }
+        "*applications have no assigned owners*" {
+            return "Assign owners to orphaned applications"
+        }
+        "*expired*" {
+            return "Renew expired application credentials"
+        }
+        "*No devices registered*" {
+            return "Implement device registration and management"
+        }
+        "*failed sign-ins*" {
+            if ($Finding.Finding -match '(\d+\.\d+)%') {
+                return "Investigate failed sign-in patterns ($($matches[1])%)"
+            }
+        }
+        "*legacy authentication*" {
+            return "Block legacy authentication protocols"
+        }
+        "*risky users*" {
+            return "Review and remediate risky user accounts"
+        }
+        default {
+            # Return null for non-actionable findings
+            return $null
+        }
+    }
+    
+    return $null
+}
+
+function Get-FindingPriority {
+    param($Finding, $Severity)
+    
+    # Assign priority scores (higher = more important)
+    $basePriority = switch ($Severity) {
+        'Critical' { 1000 }
+        'High' { 500 }
+        'Medium' { 100 }
+        'Low' { 50 }
+    }
+    
+    # Boost priority for high-impact security findings
+    $priorityBoost = 0
+    switch -Wildcard ($Finding.Finding) {
+        "*MFA*" { $priorityBoost += 200 }  # MFA is critical
+        "*Exchange Administrator has no members*" { $priorityBoost += 150 }  # Break-glass access
+        "*Security Defaults*" { $priorityBoost += 100 }  # Basic security
+        "*expired*" { $priorityBoost += 175 }  # Service disruption risk
+        "*Global Administrator*" { $priorityBoost += 125 }  # Privileged access
+        "*legacy authentication*" { $priorityBoost += 150 }  # Security bypass
+        "*risky users*" { $priorityBoost += 180 }  # Active threats
+        default { $priorityBoost += 0 }
+    }
+    
+    return $basePriority + $priorityBoost
+}
+
+function Get-DetailedRecommendation {
+    param($Finding)
+    
+    # Generate detailed recommendations with step-by-step instructions
+    $details = switch -Wildcard ($Finding.Finding) {
+        "*MFA*configured*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Multi-Factor Authentication (MFA) is your strongest defense against credential-based attacks. Even if passwords are compromised, MFA prevents unauthorized access.</p>
+<h5>How to Fix</h5>
+<p>1. Navigate to Azure Portal > Azure Active Directory > Security > Conditional Access</p>
+<p>2. Create a new policy requiring MFA for all users</p>
+<p>3. Test with pilot group first, then roll out organization-wide</p>
+<code>New-MgIdentityConditionalAccessPolicy -DisplayName "Require MFA for All Users"</code>
+"@
+        }
+        "*Security Defaults are disabled*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Security Defaults provide baseline security for tenants without Conditional Access policies. They enforce MFA and block legacy authentication.</p>
+<h5>How to Fix</h5>
+<p>1. If you have Conditional Access policies, ensure they cover MFA requirements</p>
+<p>2. Otherwise, enable Security Defaults in Azure Portal > Azure Active Directory > Properties</p>
+<code>Update-MgPolicyIdentitySecurityDefaultEnforcementPolicy -IsEnabled `$true</code>
+"@
+        }
+        "*Exchange Administrator has no members*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Break-glass admin accounts ensure you can maintain access to critical services during emergencies or when primary admins are unavailable.</p>
+<h5>How to Fix</h5>
+<p>1. Create a dedicated break-glass account (e.g., breakglass@domain.com)</p>
+<p>2. Assign it to Exchange Administrator role</p>
+<p>3. Store credentials securely and document emergency procedures</p>
+<code>New-MgDirectoryRoleMember -DirectoryRoleId (Get-MgDirectoryRole -Filter "DisplayName eq 'Exchange Administrator'").Id -Id (Get-MgUser -Filter "DisplayName eq 'BreakGlass'").Id</code>
+"@
+        }
+        "*Global Administrator has*members*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Too many Global Administrators increases your attack surface. Each additional GA represents a potential security risk if compromised.</p>
+<h5>How to Fix</h5>
+<p>1. Review current Global Administrator assignments</p>
+<p>2. Assign users to least-privilege roles instead (User Admin, Security Admin, etc.)</p>
+<p>3. Keep only 2-4 Global Administrators for break-glass scenarios</p>
+<code>Get-MgDirectoryRoleMember -DirectoryRoleId (Get-MgDirectoryRole -Filter "DisplayName eq 'Global Administrator'").Id</code>
+"@
+        }
+        "*Guest users can create*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Guest users with excessive permissions can create security risks and compliance issues in your tenant.</p>
+<h5>How to Fix</h5>
+<p>1. Navigate to Azure Portal > Azure Active Directory > External Identities > External collaboration settings</p>
+<p>2. Restrict guest user permissions to "Guest users have limited access to properties and memberships"</p>
+<p>3. Review and update guest user access policies</p>
+<code>Update-MgPolicyAuthorizationPolicy -AllowedToCreateApps `$false -AllowedToCreateSecurityGroups `$false</code>
+"@
+        }
+        "*applications have no assigned owners*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Orphaned applications create security risks and compliance issues. Without owners, these apps may have excessive permissions or expired credentials.</p>
+<h5>How to Fix</h5>
+<p>1. Review all application registrations in Azure Portal > App registrations</p>
+<p>2. Assign owners to each application</p>
+<p>3. Review and clean up unused applications</p>
+<code>Get-MgApplication | Where-Object { (Get-MgApplicationOwner -ApplicationId `$_.Id).Count -eq 0 }</code>
+"@
+        }
+        "*expired*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Expired application credentials can cause service disruptions and security vulnerabilities. Applications may fail to authenticate properly.</p>
+<h5>How to Fix</h5>
+<p>1. Identify applications with expired credentials</p>
+<p>2. Generate new client secrets or certificates</p>
+<p>3. Update application configurations with new credentials</p>
+<code>Get-MgApplication | Where-Object { `$_.PasswordCredentials.EndDateTime -lt (Get-Date) }</code>
+"@
+        }
+        "*legacy authentication*" {
+            @"
+<h5>Why This Matters</h5>
+<p>Legacy authentication protocols bypass modern security controls like MFA, making them a major security risk.</p>
+<h5>How to Fix</h5>
+<p>1. Create a Conditional Access policy to block legacy authentication</p>
+<p>2. Target "Exchange ActiveSync clients" and "Other clients"</p>
+<p>3. Monitor sign-in logs to ensure no disruption to legitimate services</p>
+<code># Create CA policy to block legacy authentication via Azure Portal</code>
+"@
+        }
+        "*failed sign-ins*" {
+            @"
+<h5>Why This Matters</h5>
+<p>High failure rates may indicate brute force attacks, misconfigured applications, or user experience issues that need attention.</p>
+<h5>How to Fix</h5>
+<p>1. Analyze sign-in logs to identify failure patterns</p>
+<p>2. Look for repeated failures from same IPs or users</p>
+<p>3. Implement account lockout policies if needed</p>
+<code>Get-MgAuditLogSignIn -Filter "status/errorCode ne 0" -Top 100</code>
+"@
+        }
+        default {
+            @"
+<h5>Additional Information</h5>
+<p>Review the detailed findings in the tables below for specific remediation steps.</p>
+<h5>General Best Practices</h5>
+<p>• Regularly review security settings and policies</p>
+<p>• Implement least-privilege access principles</p>
+<p>• Monitor audit logs for suspicious activity</p>
+"@
+        }
+    }
+    
+    return $details
+}
+
 function Generate-RemediationActions {
     param($Finding)
     
@@ -976,6 +1253,9 @@ function Generate-HtmlReport {
     
     # Generate insights
     $insights = Generate-KeyInsights
+    
+    # Generate top recommendations
+    $topRecommendations = Generate-TopRecommendations
     
     # Generate findings content as tables
     $findingsContent = ""
@@ -1070,7 +1350,9 @@ function Generate-HtmlReport {
     }
     
     # Replace template placeholders
+    $tenantDisplayName = if ($script:TenantName) { $script:TenantName } else { "Unknown Tenant" }
     $html = $template -replace '{{TIMESTAMP}}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    $html = $html -replace '{{TENANT_NAME}}', $tenantDisplayName
     $html = $html -replace '{{RISK_SCORE}}', $riskData.Score
     $html = $html -replace '{{RISK_LEVEL}}', $riskData.Level
     $html = $html -replace '{{CRITICAL_COUNT}}', $script:AssessmentResults.Critical.Count
@@ -1079,6 +1361,7 @@ function Generate-HtmlReport {
     $html = $html -replace '{{LOW_COUNT}}', $script:AssessmentResults.Low.Count
     $html = $html -replace '{{GOOD_COUNT}}', $script:AssessmentResults.Good.Count
     $html = $html -replace '{{INSIGHTS_CONTENT}}', $insights
+    $html = $html -replace '{{TOP_RECOMMENDATIONS}}', $topRecommendations
     $html = $html -replace '{{FINDINGS_CONTENT}}', $findingsContent
     
     # Write to file
@@ -1127,6 +1410,37 @@ function Generate-BasicHtmlReport {
     $html | Out-File -FilePath $OutputPath -Encoding UTF8
 }
 
+function Get-DynamicOutputPath {
+    param(
+        [string]$CustomPath = ""
+    )
+    
+    # If user provided a custom path, use it
+    if ($CustomPath -and $CustomPath -ne "") {
+        return $CustomPath
+    }
+    
+    # Get current date in a safe filename format
+    $dateString = Get-Date -Format "yyyy-MM-dd"
+    
+    # Get tenant name and sanitize for filename
+    $tenantName = if ($script:TenantName) {
+        # Remove invalid filename characters and limit length
+        $sanitized = $script:TenantName -replace '[<>:"/\\|?*]', '-'
+        $sanitized = $sanitized -replace '\s+', '-'  # Replace spaces with hyphens
+        $sanitized = $sanitized.Substring(0, [Math]::Min($sanitized.Length, 50))  # Limit length
+        $sanitized.Trim('-')  # Remove leading/trailing hyphens
+    } else {
+        "Unknown-Tenant"
+    }
+    
+    # Create filename: TenantName_Azure-Entra-Security-Report_YYYY-MM-DD.html
+    $filename = "${tenantName}_Azure-Entra-Security-Report_${dateString}.html"
+    
+    # Return full path
+    return Join-Path (Get-Location) $filename
+}
+
 function Show-Summary {
     Write-Host "`n" + "="*80 -ForegroundColor Cyan
     Write-Host "AZURE ENTRA SECURITY ASSESSMENT SUMMARY" -ForegroundColor Cyan
@@ -1153,7 +1467,7 @@ function Show-Summary {
     }
     
     Write-Host "`nNext Steps:" -ForegroundColor White
-    Write-Host "  1. Review the detailed HTML report: $OutputPath" -ForegroundColor Gray
+    Write-Host "  1. Review the detailed HTML report: $script:FinalOutputPath" -ForegroundColor Gray
     Write-Host "  2. Address critical and high priority findings first" -ForegroundColor Gray
     Write-Host "  3. Implement recommended security improvements" -ForegroundColor Gray
     Write-Host "  4. Schedule regular security assessments" -ForegroundColor Gray
@@ -1177,6 +1491,10 @@ function Start-SecurityAssessment {
         return
     }
     
+    # Generate dynamic output path after we have tenant information
+    $script:FinalOutputPath = Get-DynamicOutputPath -CustomPath $OutputPath
+    Write-Host "`nReport will be saved as: $script:FinalOutputPath" -ForegroundColor Gray
+    
     # Run security assessments
     Test-SecurityDefaults
     Test-ConditionalAccessPolicies
@@ -1191,7 +1509,7 @@ function Start-SecurityAssessment {
     Test-SignInLogs
     
     # Generate reports
-    Generate-HtmlReport -OutputPath $OutputPath
+    Generate-HtmlReport -OutputPath $script:FinalOutputPath
     Show-Summary
     
     Write-Host "`nSecurity assessment completed successfully!" -ForegroundColor Green
