@@ -13,7 +13,9 @@ $requiredModules = @(
     @{ Name = 'Microsoft.Graph.Identity.DirectoryManagement'; Description = 'Directory management' },
     @{ Name = 'Microsoft.Graph.Users'; Description = 'User management' },
     @{ Name = 'Microsoft.Graph.Groups'; Description = 'Group management' },
-    @{ Name = 'Microsoft.Graph.DeviceManagement'; Description = 'Device management' }
+    @{ Name = 'Microsoft.Graph.DeviceManagement'; Description = 'Device management' },
+    @{ Name = 'Microsoft.Graph.Applications'; Description = 'Application registration management' },
+    @{ Name = 'Microsoft.Graph.Reports'; Description = 'Audit logs and reporting' }
 )
 
 Write-Host "`nChecking PowerShell execution policy..." -ForegroundColor Yellow

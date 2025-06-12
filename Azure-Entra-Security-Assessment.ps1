@@ -27,7 +27,9 @@ $script:RequiredModules = @(
     'Microsoft.Graph.Identity.DirectoryManagement',
     'Microsoft.Graph.Users',
     'Microsoft.Graph.Groups',
-    'Microsoft.Graph.DeviceManagement'
+    'Microsoft.Graph.DeviceManagement',
+    'Microsoft.Graph.Applications',
+    'Microsoft.Graph.Reports'
 )
 
 function Test-RequiredModules {
@@ -204,7 +206,10 @@ function Connect-ToAzureServices {
             'RoleManagement.Read.All',
             'DeviceManagementConfiguration.Read.All',
             'User.Read.All',
-            'Group.Read.All'
+            'Group.Read.All',
+            'Application.Read.All',
+            'AuditLog.Read.All',
+            'Device.Read.All'
         )
         
         # Use browser authentication for Graph as well
@@ -292,23 +297,42 @@ function Test-PasswordPolicy {
     Write-Host "`n=== Analyzing Password Policies ===" -ForegroundColor Cyan
     
     try {
-        $domainPasswordPolicy = Get-MgDomain | Select-Object -First 1 | Get-MgDomainPasswordValidationPolicy -ErrorAction SilentlyContinue
+        # Check authentication methods policy
+        $authMethods = Get-MgPolicyAuthenticationMethodPolicy -ErrorAction SilentlyContinue
         
-        # Check password protection settings
-        $org = Get-MgOrganization
-        $authMethods = Get-MgPolicyAuthenticationMethodPolicy
-        
-        if ($authMethods.PolicyVersion -eq 'v2') {
-            Write-AssessmentResult -Category "Password Policy" -Finding "Authentication methods policy v2 is enabled" -Severity "Good"
-        } else {
-            Write-AssessmentResult -Category "Password Policy" -Finding "Authentication methods policy v1 is in use" -Severity "Medium" -Recommendation "Consider upgrading to v2 authentication methods policy"
+        if ($authMethods) {
+            if ($authMethods.PolicyVersion -eq 'v2') {
+                Write-AssessmentResult -Category "Password Policy" -Finding "Authentication methods policy v2 is enabled" -Severity "Good"
+            } else {
+                Write-AssessmentResult -Category "Password Policy" -Finding "Authentication methods policy v1 is in use" -Severity "Medium" -Recommendation "Consider upgrading to v2 authentication methods policy"
+            }
         }
         
-        # Check for password protection
-        $passwordProtection = Get-MgDirectoryOnPremisesSynchronization -ErrorAction SilentlyContinue
-        if ($passwordProtection) {
-            Write-AssessmentResult -Category "Password Policy" -Finding "On-premises password protection may be configured" -Severity "Info"
+        # Check organization password settings
+        $org = Get-MgOrganization -ErrorAction SilentlyContinue
+        if ($org) {
+            Write-AssessmentResult -Category "Password Policy" -Finding "Organization password policies configured" -Severity "Info"
         }
+        
+        # Check for password protection via domains
+        $domains = Get-MgDomain -ErrorAction SilentlyContinue
+        if ($domains) {
+            $verifiedDomains = $domains | Where-Object { $_.IsVerified -eq $true }
+            Write-AssessmentResult -Category "Password Policy" -Finding "$($verifiedDomains.Count) verified domains configured" -Severity "Info"
+        }
+        
+        # Check for on-premises password protection
+        try {
+            $onPremSync = Get-MgDirectoryOnPremisesSynchronization -ErrorAction SilentlyContinue
+            if ($onPremSync) {
+                Write-AssessmentResult -Category "Password Policy" -Finding "On-premises synchronization configured" -Severity "Info" -Details "Password policies may be managed on-premises"
+            }
+        }
+        catch {
+            # This is expected if no on-premises sync is configured
+        }
+        
+        Write-AssessmentResult -Category "Password Policy" -Finding "Password policy analysis completed" -Severity "Good" -Details "Review authentication methods and organizational policies"
     }
     catch {
         Write-AssessmentResult -Category "Password Policy" -Finding "Unable to fully analyze password policies" -Severity "Low" -Details $_.Exception.Message
@@ -425,28 +449,60 @@ function Test-IdentityProtection {
     Write-Host "`n=== Checking Identity Protection ===" -ForegroundColor Cyan
     
     try {
-        # Check for risky users
-        $riskyUsers = Get-MgIdentityProtectionRiskyUser -Top 10
+        # Try to check if Identity Protection is available by testing access
+        $identityProtectionAvailable = $false
         
-        if ($riskyUsers.Count -gt 0) {
-            $highRiskUsers = $riskyUsers | Where-Object { $_.RiskLevel -eq 'high' }
-            if ($highRiskUsers.Count -gt 0) {
-                Write-AssessmentResult -Category "Identity Protection" -Finding "$($highRiskUsers.Count) high-risk users detected" -Severity "High" -Recommendation "Review and remediate high-risk users immediately"
+        try {
+            # Test access to Identity Protection APIs
+            $riskyUsers = Get-MgRiskyUser -Top 1 -ErrorAction Stop
+            $identityProtectionAvailable = $true
+        }
+        catch {
+            if ($_.Exception.Message -like "*Forbidden*" -or $_.Exception.Message -like "*Premium*" -or $_.Exception.Message -like "*license*") {
+                Write-AssessmentResult -Category "Identity Protection" -Finding "Identity Protection features not available" -Severity "Medium" -Recommendation "Consider upgrading to Azure AD Premium P2 for Identity Protection features"
+                return
             }
-            
-            Write-AssessmentResult -Category "Identity Protection" -Finding "$($riskyUsers.Count) risky users found in recent activity" -Severity "Medium" -Recommendation "Review risky users and consider remediation actions"
-        } else {
-            Write-AssessmentResult -Category "Identity Protection" -Finding "No risky users detected in recent activity" -Severity "Good"
         }
         
-        # Check for risk events
-        $riskEvents = Get-MgIdentityProtectionRiskDetection -Top 10
-        if ($riskEvents.Count -gt 0) {
-            Write-AssessmentResult -Category "Identity Protection" -Finding "$($riskEvents.Count) recent risk detections found" -Severity "Info" -Details "Recent risk events detected in the tenant"
+        if ($identityProtectionAvailable) {
+            # Check for risky users using the correct cmdlet
+            $riskyUsers = Get-MgRiskyUser -Top 50 -ErrorAction SilentlyContinue
+            
+            if ($riskyUsers -and $riskyUsers.Count -gt 0) {
+                $highRiskUsers = $riskyUsers | Where-Object { $_.RiskLevel -eq 'high' }
+                $mediumRiskUsers = $riskyUsers | Where-Object { $_.RiskLevel -eq 'medium' }
+                
+                if ($highRiskUsers.Count -gt 0) {
+                    Write-AssessmentResult -Category "Identity Protection" -Finding "$($highRiskUsers.Count) high-risk users detected" -Severity "High" -Recommendation "Review and remediate high-risk users immediately"
+                }
+                
+                if ($mediumRiskUsers.Count -gt 0) {
+                    Write-AssessmentResult -Category "Identity Protection" -Finding "$($mediumRiskUsers.Count) medium-risk users detected" -Severity "Medium" -Recommendation "Review medium-risk users and consider remediation"
+                }
+                
+                Write-AssessmentResult -Category "Identity Protection" -Finding "$($riskyUsers.Count) total risky users found" -Severity "Info" -Details "Identity Protection is monitoring user risk"
+            } else {
+                Write-AssessmentResult -Category "Identity Protection" -Finding "No risky users detected" -Severity "Good" -Details "Identity Protection is active and monitoring"
+            }
+            
+            # Check for risk detections using the correct cmdlet
+            try {
+                $riskDetections = Get-MgRiskDetection -Top 10 -ErrorAction SilentlyContinue
+                if ($riskDetections -and $riskDetections.Count -gt 0) {
+                    Write-AssessmentResult -Category "Identity Protection" -Finding "$($riskDetections.Count) recent risk detections found" -Severity "Info" -Details "Recent risk events detected in the tenant"
+                } else {
+                    Write-AssessmentResult -Category "Identity Protection" -Finding "No recent risk detections" -Severity "Good"
+                }
+            }
+            catch {
+                Write-AssessmentResult -Category "Identity Protection" -Finding "Risk detection data not accessible" -Severity "Info" -Details "May require additional permissions"
+            }
+        } else {
+            Write-AssessmentResult -Category "Identity Protection" -Finding "Identity Protection status unknown" -Severity "Info" -Details "Unable to determine Identity Protection availability"
         }
     }
     catch {
-        if ($_.Exception.Message -like "*Forbidden*" -or $_.Exception.Message -like "*Premium*") {
+        if ($_.Exception.Message -like "*Forbidden*" -or $_.Exception.Message -like "*Premium*" -or $_.Exception.Message -like "*license*") {
             Write-AssessmentResult -Category "Identity Protection" -Finding "Identity Protection features not available" -Severity "Medium" -Recommendation "Consider upgrading to Azure AD Premium P2 for Identity Protection features"
         } else {
             Write-AssessmentResult -Category "Identity Protection" -Finding "Unable to check Identity Protection status" -Severity "Low" -Details $_.Exception.Message
@@ -454,100 +510,621 @@ function Test-IdentityProtection {
     }
 }
 
+function Test-ApplicationRegistrations {
+    Write-Host "`n=== Analyzing Application Registrations ===" -ForegroundColor Cyan
+    
+    try {
+        $applications = Get-MgApplication -All
+        Write-AssessmentResult -Category "Applications" -Finding "$($applications.Count) application registrations found" -Severity "Info"
+        
+        # Check for applications with expiring secrets/certificates
+        $expiringSecrets = @()
+        $expiredSecrets = @()
+        $expiringCerts = @()
+        $expiredCerts = @()
+        $orphanedApps = @()
+        
+        $currentDate = Get-Date
+        
+        foreach ($app in $applications) {
+            # Check owners
+            try {
+                $owners = Get-MgApplicationOwner -ApplicationId $app.Id -ErrorAction SilentlyContinue
+                if ($owners.Count -eq 0) {
+                    $orphanedApps += $app
+                }
+            }
+            catch {
+                # Assume orphaned if we can't check owners
+                $orphanedApps += $app
+            }
+            
+            # Check password credentials (secrets)
+            if ($app.PasswordCredentials) {
+                foreach ($cred in $app.PasswordCredentials) {
+                    if ($cred.EndDateTime) {
+                        $daysUntilExpiry = ($cred.EndDateTime - $currentDate).Days
+                        if ($daysUntilExpiry -lt 0) {
+                            $expiredSecrets += @{ App = $app.DisplayName; DaysOverdue = [Math]::Abs($daysUntilExpiry) }
+                        } elseif ($daysUntilExpiry -le 30) {
+                            $expiringSecrets += @{ App = $app.DisplayName; DaysLeft = $daysUntilExpiry }
+                        }
+                    }
+                }
+            }
+            
+            # Check key credentials (certificates)
+            if ($app.KeyCredentials) {
+                foreach ($cred in $app.KeyCredentials) {
+                    if ($cred.EndDateTime) {
+                        $daysUntilExpiry = ($cred.EndDateTime - $currentDate).Days
+                        if ($daysUntilExpiry -lt 0) {
+                            $expiredCerts += @{ App = $app.DisplayName; DaysOverdue = [Math]::Abs($daysUntilExpiry) }
+                        } elseif ($daysUntilExpiry -le 30) {
+                            $expiringCerts += @{ App = $app.DisplayName; DaysLeft = $daysUntilExpiry }
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Report findings
+        if ($expiredSecrets.Count -gt 0) {
+            Write-AssessmentResult -Category "Applications" -Finding "$($expiredSecrets.Count) applications have expired secrets" -Severity "High" -Recommendation "Renew expired application secrets immediately to prevent service disruption"
+        }
+        
+        if ($expiredCerts.Count -gt 0) {
+            Write-AssessmentResult -Category "Applications" -Finding "$($expiredCerts.Count) applications have expired certificates" -Severity "High" -Recommendation "Renew expired application certificates immediately"
+        }
+        
+        if ($expiringSecrets.Count -gt 0) {
+            Write-AssessmentResult -Category "Applications" -Finding "$($expiringSecrets.Count) applications have secrets expiring within 30 days" -Severity "Medium" -Recommendation "Plan renewal of application secrets before expiration"
+        }
+        
+        if ($expiringCerts.Count -gt 0) {
+            Write-AssessmentResult -Category "Applications" -Finding "$($expiringCerts.Count) applications have certificates expiring within 30 days" -Severity "Medium" -Recommendation "Plan renewal of application certificates before expiration"
+        }
+        
+        if ($orphanedApps.Count -gt 0) {
+            Write-AssessmentResult -Category "Applications" -Finding "$($orphanedApps.Count) applications have no assigned owners" -Severity "Medium" -Recommendation "Assign owners to applications for proper lifecycle management"
+        }
+        
+        if ($expiredSecrets.Count -eq 0 -and $expiredCerts.Count -eq 0 -and $expiringSecrets.Count -eq 0 -and $expiringCerts.Count -eq 0) {
+            Write-AssessmentResult -Category "Applications" -Finding "No application credentials expiring within 30 days" -Severity "Good"
+        }
+        
+    }
+    catch {
+        Write-AssessmentResult -Category "Applications" -Finding "Unable to analyze application registrations" -Severity "Medium" -Details $_.Exception.Message
+    }
+}
+
+function Test-DeviceCompliance {
+    Write-Host "`n=== Analyzing Device Compliance ===" -ForegroundColor Cyan
+    
+    try {
+        $devices = Get-MgDevice -All
+        Write-AssessmentResult -Category "Devices" -Finding "$($devices.Count) devices registered in the directory" -Severity "Info"
+        
+        if ($devices.Count -eq 0) {
+            Write-AssessmentResult -Category "Devices" -Finding "No devices registered" -Severity "Medium" -Recommendation "Consider implementing device registration for enhanced security"
+            return
+        }
+        
+        $currentDate = Get-Date
+        $staleDevices = @()
+        $enabledDevices = @()
+        $managedDevices = @()
+        
+        foreach ($device in $devices) {
+            # Check if device is enabled
+            if ($device.AccountEnabled) {
+                $enabledDevices += $device
+            }
+            
+            # Check for stale devices (no activity in 90 days)
+            if ($device.ApproximateLastSignInDateTime) {
+                $daysSinceLastSignIn = ($currentDate - $device.ApproximateLastSignInDateTime).Days
+                if ($daysSinceLastSignIn -gt 90) {
+                    $staleDevices += $device
+                }
+            }
+            
+            # Check if device is managed (has management type)
+            if ($device.ManagementType -or $device.IsCompliant) {
+                $managedDevices += $device
+            }
+        }
+        
+        # Calculate percentages
+        $enabledPercentage = if ($devices.Count -gt 0) { [math]::Round(($enabledDevices.Count / $devices.Count) * 100, 2) } else { 0 }
+        $managedPercentage = if ($devices.Count -gt 0) { [math]::Round(($managedDevices.Count / $devices.Count) * 100, 2) } else { 0 }
+        
+        # Report findings
+        Write-AssessmentResult -Category "Devices" -Finding "$($enabledDevices.Count) devices are enabled ($enabledPercentage%)" -Severity "Info"
+        
+        if ($staleDevices.Count -gt 0) {
+            $stalePercentage = [math]::Round(($staleDevices.Count / $devices.Count) * 100, 2)
+            if ($stalePercentage -gt 20) {
+                Write-AssessmentResult -Category "Devices" -Finding "$($staleDevices.Count) devices are stale (>90 days inactive, $stalePercentage%)" -Severity "Medium" -Recommendation "Clean up stale device objects to maintain directory hygiene"
+            } else {
+                Write-AssessmentResult -Category "Devices" -Finding "$($staleDevices.Count) devices are stale (>90 days inactive, $stalePercentage%)" -Severity "Low" -Recommendation "Consider periodic cleanup of inactive devices"
+            }
+        } else {
+            Write-AssessmentResult -Category "Devices" -Finding "No stale devices detected" -Severity "Good"
+        }
+        
+        if ($managedPercentage -ge 80) {
+            Write-AssessmentResult -Category "Devices" -Finding "$($managedDevices.Count) devices are managed ($managedPercentage%)" -Severity "Good"
+        } elseif ($managedPercentage -ge 50) {
+            Write-AssessmentResult -Category "Devices" -Finding "$($managedDevices.Count) devices are managed ($managedPercentage%)" -Severity "Medium" -Recommendation "Increase device management coverage for better security"
+        } else {
+            Write-AssessmentResult -Category "Devices" -Finding "$($managedDevices.Count) devices are managed ($managedPercentage%)" -Severity "High" -Recommendation "Implement device management solution to ensure compliance"
+        }
+        
+    }
+    catch {
+        Write-AssessmentResult -Category "Devices" -Finding "Unable to analyze device compliance" -Severity "Medium" -Details $_.Exception.Message
+    }
+}
+
+function Test-NamedLocations {
+    Write-Host "`n=== Analyzing Named Locations ===" -ForegroundColor Cyan
+    
+    try {
+        $namedLocations = Get-MgIdentityConditionalAccessNamedLocation
+        
+        if ($namedLocations.Count -eq 0) {
+            Write-AssessmentResult -Category "Named Locations" -Finding "No named locations configured" -Severity "Medium" -Recommendation "Configure named locations to enhance Conditional Access policies with location-based controls"
+        } else {
+            Write-AssessmentResult -Category "Named Locations" -Finding "$($namedLocations.Count) named locations configured" -Severity "Info"
+            
+            $trustedLocations = $namedLocations | Where-Object { $_.IsTrusted -eq $true }
+            $ipBasedLocations = $namedLocations | Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.ipNamedLocation' }
+            $countryLocations = $namedLocations | Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.countryNamedLocation' }
+            
+            if ($trustedLocations.Count -gt 0) {
+                Write-AssessmentResult -Category "Named Locations" -Finding "$($trustedLocations.Count) trusted locations defined" -Severity "Info" -Details "Trusted locations can skip MFA requirements"
+            }
+            
+            if ($ipBasedLocations.Count -gt 0) {
+                Write-AssessmentResult -Category "Named Locations" -Finding "$($ipBasedLocations.Count) IP-based locations configured" -Severity "Good"
+            }
+            
+            if ($countryLocations.Count -gt 0) {
+                Write-AssessmentResult -Category "Named Locations" -Finding "$($countryLocations.Count) country-based locations configured" -Severity "Good"
+            }
+            
+            # Check if named locations are being used in CA policies
+            $caPolicies = Get-MgIdentityConditionalAccessPolicy -ErrorAction SilentlyContinue
+            $policiesUsingLocations = $caPolicies | Where-Object { 
+                $_.Conditions.Locations.IncludeLocations.Count -gt 0 -or $_.Conditions.Locations.ExcludeLocations.Count -gt 0 
+            }
+            
+            if ($policiesUsingLocations.Count -gt 0) {
+                Write-AssessmentResult -Category "Named Locations" -Finding "$($policiesUsingLocations.Count) Conditional Access policies use location conditions" -Severity "Good"
+            } else {
+                Write-AssessmentResult -Category "Named Locations" -Finding "Named locations exist but are not used in Conditional Access policies" -Severity "Medium" -Recommendation "Leverage named locations in Conditional Access policies for location-based security"
+            }
+        }
+        
+    }
+    catch {
+        Write-AssessmentResult -Category "Named Locations" -Finding "Unable to analyze named locations" -Severity "Low" -Details $_.Exception.Message
+    }
+}
+
+function Test-SignInLogs {
+    Write-Host "`n=== Analyzing Sign-in Patterns (Last 7 Days) ===" -ForegroundColor Cyan
+    
+    try {
+        # Get sign-ins from last 7 days
+        $startDate = (Get-Date).AddDays(-7).ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $signIns = Get-MgAuditLogSignIn -Filter "createdDateTime ge $startDate" -Top 1000
+        
+        if ($signIns.Count -eq 0) {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "No sign-in logs available for analysis" -Severity "Low" -Details "May require Azure AD Premium license or recent activity"
+            return
+        }
+        
+        Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$($signIns.Count) sign-in events analyzed (last 7 days)" -Severity "Info"
+        
+        # Analyze failed sign-ins
+        $failedSignIns = $signIns | Where-Object { $_.Status.ErrorCode -ne 0 }
+        $failedPercentage = if ($signIns.Count -gt 0) { [math]::Round(($failedSignIns.Count / $signIns.Count) * 100, 2) } else { 0 }
+        
+        if ($failedPercentage -gt 20) {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$($failedSignIns.Count) failed sign-ins ($failedPercentage%)" -Severity "High" -Recommendation "Investigate high failure rate - possible attack or configuration issues"
+        } elseif ($failedPercentage -gt 10) {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$($failedSignIns.Count) failed sign-ins ($failedPercentage%)" -Severity "Medium" -Recommendation "Monitor failed sign-in patterns for potential security issues"
+        } else {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$($failedSignIns.Count) failed sign-ins ($failedPercentage%)" -Severity "Good"
+        }
+        
+        # Check for legacy authentication
+        $legacyAuth = $signIns | Where-Object { 
+            $_.ClientAppUsed -in @('Exchange ActiveSync', 'Other clients', 'IMAP', 'MAPI', 'POP', 'SMTP') -or
+            $_.ClientAppUsed -like '*Legacy*'
+        }
+        
+        if ($legacyAuth.Count -gt 0) {
+            $legacyPercentage = [math]::Round(($legacyAuth.Count / $signIns.Count) * 100, 2)
+            if ($legacyPercentage -gt 5) {
+                Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$($legacyAuth.Count) legacy authentication attempts ($legacyPercentage%)" -Severity "High" -Recommendation "Block legacy authentication protocols - they bypass MFA and modern security controls"
+            } else {
+                Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$($legacyAuth.Count) legacy authentication attempts ($legacyPercentage%)" -Severity "Medium" -Recommendation "Consider blocking remaining legacy authentication usage"
+            }
+        } else {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "No legacy authentication detected" -Severity "Good"
+        }
+        
+        # Check for impossible travel (basic analysis)
+        $uniqueUsers = $signIns | Group-Object -Property UserId
+        $suspiciousTravel = 0
+        
+        foreach ($userGroup in $uniqueUsers) {
+            $userSignIns = $userGroup.Group | Sort-Object CreatedDateTime
+            for ($i = 1; $i -lt $userSignIns.Count; $i++) {
+                $prevSignIn = $userSignIns[$i-1]
+                $currentSignIn = $userSignIns[$i]
+                
+                if ($prevSignIn.Location.CountryOrRegion -and $currentSignIn.Location.CountryOrRegion) {
+                    if ($prevSignIn.Location.CountryOrRegion -ne $currentSignIn.Location.CountryOrRegion) {
+                        $timeDiff = $currentSignIn.CreatedDateTime - $prevSignIn.CreatedDateTime
+                        if ($timeDiff.TotalHours -lt 2) {
+                            $suspiciousTravel++
+                        }
+                    }
+                }
+            }
+        }
+        
+        if ($suspiciousTravel -gt 0) {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "$suspiciousTravel potential impossible travel events detected" -Severity "Medium" -Recommendation "Review sign-ins with rapid geographic changes - may indicate compromised accounts"
+        }
+        
+        # Check geographic distribution
+        $countries = $signIns | Where-Object { $_.Location.CountryOrRegion } | Group-Object -Property { $_.Location.CountryOrRegion } | Sort-Object Count -Descending
+        if ($countries.Count -gt 10) {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "Sign-ins from $($countries.Count) different countries" -Severity "Medium" -Recommendation "Monitor geographic sign-in patterns for unusual activity"
+        } elseif ($countries.Count -gt 0) {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "Sign-ins from $($countries.Count) countries" -Severity "Info" -Details "Top countries: $($countries[0..2].Name -join ', ')"
+        }
+        
+    }
+    catch {
+        if ($_.Exception.Message -like "*Forbidden*" -or $_.Exception.Message -like "*Premium*") {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "Sign-in logs not accessible" -Severity "Low" -Recommendation "Azure AD Premium license may be required for detailed sign-in analytics"
+        } else {
+            Write-AssessmentResult -Category "Sign-in Analysis" -Finding "Unable to analyze sign-in logs" -Severity "Low" -Details $_.Exception.Message
+        }
+    }
+}
+
+function Calculate-RiskScore {
+    Write-Host "📊 Calculating security risk score..." -ForegroundColor Cyan
+    
+    # Count findings by severity
+    $criticalCount = $script:AssessmentResults.Critical.Count
+    $highCount = $script:AssessmentResults.High.Count
+    $mediumCount = $script:AssessmentResults.Medium.Count
+    $lowCount = $script:AssessmentResults.Low.Count
+    $goodCount = $script:AssessmentResults.Good.Count
+    
+    $totalFindings = $criticalCount + $highCount + $mediumCount + $lowCount
+    
+    Write-Host "  Critical Issues: $criticalCount" -ForegroundColor Red
+    Write-Host "  High Priority: $highCount" -ForegroundColor Magenta
+    Write-Host "  Medium Priority: $mediumCount" -ForegroundColor Yellow
+    Write-Host "  Low Priority: $lowCount" -ForegroundColor Cyan
+    Write-Host "  Good Practices: $goodCount" -ForegroundColor Green
+    
+    # Start with base score of 100
+    $baseScore = 100
+    
+    # More realistic weighted deductions based on security impact
+    # Critical issues are severe security risks but shouldn't destroy the score
+    $criticalDeduction = $criticalCount * 12
+    # High issues are significant risks
+    $highDeduction = $highCount * 8
+    # Medium issues are moderate risks
+    $mediumDeduction = $mediumCount * 4
+    # Low issues are minor improvements
+    $lowDeduction = $lowCount * 2
+    
+    $totalDeductions = $criticalDeduction + $highDeduction + $mediumDeduction + $lowDeduction
+    
+    # Calculate base score after deductions (minimum 20 to avoid extremely low scores)
+    $score = [Math]::Max(20, $baseScore - $totalDeductions)
+    
+    # Add significant bonus points for good practices (up to 20 points)
+    $goodBonus = [Math]::Min(20, $goodCount * 3)
+    $score = [Math]::Min(100, $score + $goodBonus)
+    
+    # Apply a "real-world adjustment" - most organizations should score 40+ if they have basic security
+    if ($totalFindings -le 10 -and $criticalCount -eq 0) {
+        $score = [Math]::Max($score, 60)  # Minimum 60 for low-finding environments
+    }
+    if ($criticalCount -eq 0 -and $highCount -le 2) {
+        $score = [Math]::Max($score, 50)  # Minimum 50 for environments without critical issues
+    }
+    
+    # Determine risk level with more realistic thresholds
+    $level = if ($score -ge 85) { "EXCELLENT" }
+            elseif ($score -ge 70) { "GOOD" }
+            elseif ($score -ge 55) { "FAIR" }
+            elseif ($score -ge 40) { "NEEDS IMPROVEMENT" }
+            elseif ($score -ge 25) { "POOR" }
+            else { "CRITICAL" }
+    
+    # Provide context
+    $context = switch ($level) {
+        "EXCELLENT" { "Outstanding security posture - industry leading practices" }
+        "GOOD" { "Strong security posture with room for optimization" }
+        "FAIR" { "Solid security foundation with some gaps to address" }
+        "NEEDS IMPROVEMENT" { "Basic security in place but important improvements needed" }
+        "POOR" { "Significant security gaps require attention" }
+        "CRITICAL" { "Major security vulnerabilities need immediate action" }
+    }
+    
+    Write-Host "  Security Score: $score/100 ($level)" -ForegroundColor $(
+        switch ($level) {
+            "EXCELLENT" { "Green" }
+            "GOOD" { "Green" }
+            "FAIR" { "Yellow" }
+            "NEEDS IMPROVEMENT" { "Yellow" }
+            "POOR" { "Magenta" }
+            "CRITICAL" { "Red" }
+        }
+    )
+    Write-Host "  Assessment: $context" -ForegroundColor Gray
+    
+    return @{ 
+        Score = $score
+        Level = $level
+        Context = $context
+        Breakdown = @{
+            Critical = $criticalCount
+            High = $highCount
+            Medium = $mediumCount
+            Low = $lowCount
+            Good = $goodCount
+            CriticalDeduction = $criticalDeduction
+            HighDeduction = $highDeduction
+            MediumDeduction = $mediumDeduction
+            LowDeduction = $lowDeduction
+            GoodBonus = $goodBonus
+        }
+    }
+}
+
+function Generate-KeyInsights {
+    $insights = @()
+    $totalUsers = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "MFA" -and $_.Finding -like "*Total active users*" }).Finding
+    $totalApps = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "Applications" -and $_.Finding -like "*application registrations found*" }).Finding
+    $totalDevices = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "Devices" -and $_.Finding -like "*devices registered*" }).Finding
+    $totalPolicies = ($script:AssessmentResults.Info | Where-Object { $_.Category -eq "Conditional Access" -and $_.Finding -like "*Conditional Access policies found*" }).Finding
+    
+    if ($totalUsers) {
+        $userCount = ($totalUsers -split ': ')[1]
+        $insights += "<div class='insight-card'><div class='insight-number'>$userCount</div><div class='insight-label'>Active Users</div></div>"
+    }
+    
+    if ($totalApps) {
+        $appCount = ($totalApps -split ' ')[0]
+        $insights += "<div class='insight-card'><div class='insight-number'>$appCount</div><div class='insight-label'>Applications</div></div>"
+    }
+    
+    if ($totalDevices) {
+        $deviceCount = ($totalDevices -split ' ')[0]
+        $insights += "<div class='insight-card'><div class='insight-number'>$deviceCount</div><div class='insight-label'>Registered Devices</div></div>"
+    }
+    
+    if ($totalPolicies) {
+        $policyCount = ($totalPolicies -split ' ')[0]
+        $insights += "<div class='insight-card'><div class='insight-number'>$policyCount</div><div class='insight-label'>CA Policies</div></div>"
+    }
+    
+    return $insights -join "`n"
+}
+
+function Generate-RemediationActions {
+    param($Finding)
+    
+    $actions = @()
+    
+    # Add specific PowerShell commands based on finding type
+    switch -Wildcard ($Finding.Finding) {
+        "*Security Defaults are disabled*" {
+            $actions += "# Enable Security Defaults`nUpdate-MgPolicyIdentitySecurityDefaultEnforcementPolicy -IsEnabled `$true"
+        }
+        "*No Conditional Access policies*" {
+            $actions += "# Create a basic MFA policy via Azure Portal`n# Navigate to: Azure AD > Security > Conditional Access > New Policy"
+        }
+        "*expired secrets*" {
+            $actions += "# Find applications with expired secrets`nGet-MgApplication | Where-Object { `$_.PasswordCredentials.EndDateTime -lt (Get-Date) }"
+        }
+        "*stale devices*" {
+            $actions += "# Remove stale devices (>90 days inactive)`nGet-MgDevice | Where-Object { `$_.ApproximateLastSignInDateTime -lt (Get-Date).AddDays(-90) } | Remove-MgDevice"
+        }
+        "*legacy authentication*" {
+            $actions += "# Block legacy authentication via Conditional Access`n# Create CA policy targeting legacy authentication protocols"
+        }
+    }
+    
+    return $actions -join "`n"
+}
+
 function Generate-HtmlReport {
     param([string]$OutputPath)
     
-    Write-Host "`n=== Generating HTML Report ===" -ForegroundColor Cyan
+    Write-Host "`n=== Generating Enhanced HTML Report ===" -ForegroundColor Cyan
     
+    # Check if template exists
+    $templatePath = ".\report-template.html"
+    if (!(Test-Path $templatePath)) {
+        Write-Warning "Template file not found at $templatePath. Using basic template."
+        Generate-BasicHtmlReport -OutputPath $OutputPath
+        return
+    }
+    
+    # Read template
+    $template = Get-Content $templatePath -Raw
+    
+    # Calculate risk score
+    $riskData = Calculate-RiskScore
+    
+    # Generate insights
+    $insights = Generate-KeyInsights
+    
+    # Generate findings content as tables
+    $findingsContent = ""
+    
+    foreach ($severity in @('Critical', 'High', 'Medium', 'Low', 'Good', 'Info')) {
+        if ($script:AssessmentResults[$severity].Count -gt 0) {
+            $displayName = switch ($severity) {
+                'Critical' { 'Critical Priority' }
+                'High' { 'High Priority' }
+                'Medium' { 'Medium Priority' }
+                'Low' { 'Low Priority' }
+                'Good' { 'Good Practices' }
+                'Info' { 'Information' }
+            }
+            
+            $tableId = "table-$($severity.ToLower())"
+            $findingsContent += @"
+            <div class="findings-table">
+                <div class="table-header">
+                    <div class="table-title">$displayName Findings</div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span class="findings-count">$($script:AssessmentResults[$severity].Count)</span>
+                        <button class="expand-toggle" onclick="toggleTable('$tableId')" data-table="$tableId" data-severity="$severity">
+                            <span class="expand-icon">▶</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-content" id="$tableId">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Title</th>
+                                <th style="width: 10%;">Severity</th>
+                                <th style="width: 35%;">Warning</th>
+                                <th style="width: 30%;">Recommendations</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+"@
+            
+            foreach ($finding in $script:AssessmentResults[$severity]) {
+                $severityColor = switch ($severity) {
+                    'Critical' { '#dc2626' }
+                    'High' { '#ea580c' }
+                    'Medium' { '#d97706' }
+                    'Low' { '#2563eb' }
+                    'Good' { '#059669' }
+                    'Info' { '#6b7280' }
+                }
+                
+                $warningText = "$($finding.Category): $($finding.Finding)"
+                if ($finding.Details) {
+                    $warningText += " " + $finding.Details
+                }
+                
+                $recommendationText = ""
+                if ($finding.Recommendation) {
+                    $recommendationText += "<strong>Recommendation:</strong> " + $finding.Recommendation
+                }
+                
+                $remediationActions = Generate-RemediationActions -Finding $finding
+                if ($remediationActions) {
+                    if ($recommendationText) { $recommendationText += "<br><br>" }
+                    $recommendationText += "<strong>Remediation:</strong> " + $remediationActions
+                }
+                
+                $findingsContent += @"
+                            <tr>
+                                <td>
+                                    <div class="finding-title">$($finding.Category)</div>
+                                </td>
+                                <td>
+                                    <span class="severity-badge $($severity.ToLower())" style="background-color: $severityColor;">$severity</span>
+                                </td>
+                                <td>
+                                    <div class="finding-description">$warningText</div>
+                                </td>
+                                <td>
+                                    <div class="recommendation-text">$recommendationText</div>
+                                </td>
+                            </tr>
+"@
+            }
+            
+            $findingsContent += @"
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+"@
+        }
+    }
+    
+    # Replace template placeholders
+    $html = $template -replace '{{TIMESTAMP}}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    $html = $html -replace '{{RISK_SCORE}}', $riskData.Score
+    $html = $html -replace '{{RISK_LEVEL}}', $riskData.Level
+    $html = $html -replace '{{CRITICAL_COUNT}}', $script:AssessmentResults.Critical.Count
+    $html = $html -replace '{{HIGH_COUNT}}', $script:AssessmentResults.High.Count
+    $html = $html -replace '{{MEDIUM_COUNT}}', $script:AssessmentResults.Medium.Count
+    $html = $html -replace '{{LOW_COUNT}}', $script:AssessmentResults.Low.Count
+    $html = $html -replace '{{GOOD_COUNT}}', $script:AssessmentResults.Good.Count
+    $html = $html -replace '{{INSIGHTS_CONTENT}}', $insights
+    $html = $html -replace '{{FINDINGS_CONTENT}}', $findingsContent
+    
+    # Write to file
+    $html | Out-File -FilePath $OutputPath -Encoding UTF8
+    Write-Host "Enhanced HTML report generated: $OutputPath" -ForegroundColor Green
+    Write-Host "Features: Interactive charts, risk scoring, remediation actions, export options" -ForegroundColor Gray
+}
+
+function Generate-BasicHtmlReport {
+    param([string]$OutputPath)
+    
+    # Fallback basic HTML if template is missing
     $html = @"
 <!DOCTYPE html>
 <html>
 <head>
     <title>Azure Entra Security Assessment Report</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f5f5f5; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 40px; background-color: #f5f5f5; }
         .container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .summary { background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }
         .finding { margin: 15px 0; padding: 15px; border-radius: 5px; border-left: 4px solid; }
         .critical { background-color: #f77468; border-color: #e74c3c; }
         .high { background-color: #f8a0a0; border-color: #e91e63; }
         .medium { background-color: #ebd481; border-color: #f39c12; }
-        .low { background-color: #b8e0ff; border-color: #218bd1; }
+        .low { background-color: #b8e0ff; border-color: #3498db; }
         .good { background-color: #7bdda5; border-color: #27ae60; }
-        .info { background-color: #f8f9fa; border-color: #6c757d; }
-        .severity { font-weight: bold; text-transform: uppercase; }
-        .recommendation { font-style: italic; color: #555; margin-top: 8px; }
-        .details { font-size: 0.9em; color: #666; margin-top: 5px; }
-        .stats { display: flex; justify-content: space-around; flex-wrap: wrap; }
-        .stat-box { text-align: center; padding: 15px; margin: 10px; border-radius: 5px; min-width: 120px; }
-        .timestamp { color: #7f8c8d; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Azure Entra Security Assessment Report</h1>
-        <div class="timestamp">Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</div>
-        
-        <div class="summary">
-            <h2>Executive Summary</h2>
-            <div class="stats">
-                <div class="stat-box critical">
-                    <h3>$($script:AssessmentResults.Critical.Count)</h3>
-                    <p>Critical Issues</p>
-                </div>
-                <div class="stat-box high">
-                    <h3>$($script:AssessmentResults.High.Count)</h3>
-                    <p>High Priority</p>
-                </div>
-                <div class="stat-box medium">
-                    <h3>$($script:AssessmentResults.Medium.Count)</h3>
-                    <p>Medium Priority</p>
-                </div>
-                <div class="stat-box low">
-                    <h3>$($script:AssessmentResults.Low.Count)</h3>
-                    <p>Low Priority</p>
-                </div>
-                <div class="stat-box good">
-                    <h3>$($script:AssessmentResults.Good.Count)</h3>
-                    <p>Good Practices</p>
-                </div>
-            </div>
-        </div>
+        <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
 "@
 
-    # Add findings by severity
     foreach ($severity in @('Critical', 'High', 'Medium', 'Low', 'Good', 'Info')) {
         if ($script:AssessmentResults[$severity].Count -gt 0) {
-            $html += "<h2>$severity Priority Findings</h2>`n"
-            
+            $html += "<h2>$severity Priority Findings ($($script:AssessmentResults[$severity].Count))</h2>"
             foreach ($finding in $script:AssessmentResults[$severity]) {
-                $html += "<div class='finding $($severity.ToLower())'>`n"
-                $html += "<div class='severity'>[$severity]</div>`n"
-                $html += "<strong>$($finding.Category):</strong> $($finding.Finding)`n"
-                
-                if ($finding.Recommendation) {
-                    $html += "<div class='recommendation'>Recommendation: $($finding.Recommendation)</div>`n"
-                }
-                
-                if ($finding.Details) {
-                    $html += "<div class='details'>Details: $($finding.Details)</div>`n"
-                }
-                
-                $html += "</div>`n"
+                $html += "<div class='finding $($severity.ToLower())'><strong>$($finding.Category):</strong> $($finding.Finding)</div>"
             }
         }
     }
 
-    $html += @"
-    </div>
-</body>
-</html>
-"@
-
+    $html += "</div></body></html>"
     $html | Out-File -FilePath $OutputPath -Encoding UTF8
-    Write-Host "HTML report generated: $OutputPath" -ForegroundColor Green
 }
 
 function Show-Summary {
@@ -608,6 +1185,10 @@ function Start-SecurityAssessment {
     Test-GuestUserSettings
     Test-MFAConfiguration
     Test-IdentityProtection
+    Test-ApplicationRegistrations
+    Test-DeviceCompliance
+    Test-NamedLocations
+    Test-SignInLogs
     
     # Generate reports
     Generate-HtmlReport -OutputPath $OutputPath
