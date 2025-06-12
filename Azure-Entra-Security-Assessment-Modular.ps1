@@ -96,22 +96,67 @@ function Start-SecurityAssessment {
     Test-NamedLocations
     Test-SignInLogs
     
-    # Run Essential 8 assessments
+    # Run Enhanced Essential 8 assessments with maturity levels
     Write-Host "`n" + "="*60 -ForegroundColor Magenta
-    Write-Host "ESSENTIAL 8 SECURITY FRAMEWORK ASSESSMENT" -ForegroundColor Magenta
+    Write-Host "ENHANCED ESSENTIAL 8 SECURITY FRAMEWORK ASSESSMENT" -ForegroundColor Magenta
     Write-Host "="*60 -ForegroundColor Magenta
+    Write-Host "Assessing maturity levels (1-3) for each Essential 8 strategy..." -ForegroundColor Gray
     
-    Test-Essential8-ApplicationControl
-    Test-Essential8-PatchApplications
-    Test-Essential8-OfficeMacroSettings
-    Test-Essential8-UserApplicationHardening
-    Test-Essential8-RestrictAdminPrivileges
-    Test-Essential8-PatchOperatingSystems
-    Test-Essential8-MultiFactor
-    Test-Essential8-RegularBackups
-    
-    # Calculate Essential 8 compliance score
-    $essential8Score = Calculate-Essential8Score
+    # Try to import enhanced modules
+    try {
+        Import-Module ".\modules\Enhanced-Essential8-Assessments.psm1" -Force -ErrorAction Stop
+        Import-Module ".\modules\Enhanced-Essential8-Part2.psm1" -Force -ErrorAction Stop
+        Write-Host "✅ Enhanced Essential 8 modules loaded" -ForegroundColor Green
+        
+        # Run enhanced assessments with maturity levels
+        Write-Host "Running Enhanced Essential 8 assessments..." -ForegroundColor Gray
+        Test-Essential8-ApplicationControl-Enhanced
+        Test-Essential8-PatchApplications-Enhanced
+        Test-Essential8-OfficeMacroSettings-Enhanced
+        Test-Essential8-UserApplicationHardening-Enhanced
+        Test-Essential8-RestrictAdminPrivileges-Enhanced
+        Test-Essential8-PatchOperatingSystems-Enhanced
+        Test-Essential8-MultiFactor-Enhanced
+        Test-Essential8-RegularBackups-Enhanced
+        
+        # Debug: Check if Global scope has been populated
+        Write-Host "Debug: Checking Global Essential8Results after enhanced assessments..." -ForegroundColor Yellow
+        if ($Global:Essential8Results) {
+            foreach ($strategy in $Global:Essential8Results.Keys) {
+                $maturity = if ($Global:Essential8Results[$strategy].ContainsKey('MaturityLevel')) {
+                    $Global:Essential8Results[$strategy].MaturityLevel
+                } else {
+                    "Unknown"
+                }
+                Write-Host "  $strategy : Maturity Level $maturity" -ForegroundColor Gray
+            }
+        } else {
+            Write-Host "  No Global Essential8Results found!" -ForegroundColor Red
+        }
+        
+        # Calculate Enhanced Essential 8 compliance score
+        try {
+            $essential8Score = Calculate-Essential8Score-Enhanced
+        }
+        catch {
+            Write-Warning "Enhanced scoring failed. Using basic calculation."
+            $essential8Score = Calculate-Essential8Score
+        }
+    }
+    catch {
+        Write-Warning "Enhanced Essential 8 modules not found. Using basic assessments."
+        Test-Essential8-ApplicationControl
+        Test-Essential8-PatchApplications
+        Test-Essential8-OfficeMacroSettings
+        Test-Essential8-UserApplicationHardening
+        Test-Essential8-RestrictAdminPrivileges
+        Test-Essential8-PatchOperatingSystems
+        Test-Essential8-MultiFactor
+        Test-Essential8-RegularBackups
+        
+        # Calculate basic Essential 8 compliance score
+        $essential8Score = Calculate-Essential8Score
+    }
     
     # Generate reports
     Write-Host "`n" + "="*60 -ForegroundColor Yellow

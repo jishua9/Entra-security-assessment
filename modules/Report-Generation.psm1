@@ -98,8 +98,248 @@ function Calculate-RiskScore {
     }
 }
 
-function Generate-Essential8Content {
-    Write-Host "Generating Essential 8 compliance content..." -ForegroundColor Yellow
+function Generate-Enhanced-Essential8Content {
+    Write-Host "Generating Enhanced Essential 8 compliance content..." -ForegroundColor Yellow
+    
+    # Check if enhanced data is available
+    $hasEnhancedData = $false
+    if ($Global:Essential8Results) {
+        foreach ($strategy in $Global:Essential8Results.Keys) {
+            if ($Global:Essential8Results[$strategy] -is [hashtable] -and $Global:Essential8Results[$strategy].ContainsKey('MaturityLevel')) {
+                $hasEnhancedData = $true
+                break
+            }
+        }
+    }
+    
+    if ($hasEnhancedData) {
+        return Generate-Enhanced-Essential8MaturityContent
+    } else {
+        return Generate-Basic-Essential8Content
+    }
+}
+
+function Generate-Enhanced-Essential8MaturityContent {
+    # Calculate maturity statistics
+    $e8Level3Count = 0
+    $e8Level2Count = 0
+    $e8Level1Count = 0
+    $e8Level0Count = 0
+    
+    foreach ($strategy in $Global:Essential8Results.Keys) {
+        $maturity = if ($Global:Essential8Results[$strategy].ContainsKey('MaturityLevel')) {
+            $Global:Essential8Results[$strategy].MaturityLevel
+        } else {
+            0
+        }
+        
+        switch ($maturity) {
+            3 { $e8Level3Count++ }
+            2 { $e8Level2Count++ }
+            1 { $e8Level1Count++ }
+            0 { $e8Level0Count++ }
+        }
+    }
+    
+    # Calculate overall maturity percentage
+    $totalScore = 0
+    foreach ($strategy in $Global:Essential8Results.Keys) {
+        $totalScore += if ($Global:Essential8Results[$strategy].ContainsKey('MaturityLevel')) {
+            $Global:Essential8Results[$strategy].MaturityLevel
+        } else {
+            0
+        }
+    }
+    $essential8Maturity = [math]::Round(($totalScore / (8 * 3)) * 100, 1)
+    
+    # Store these values globally so they can be used in template replacement
+    $Global:E8_MATURITY = $essential8Maturity
+    $Global:E8_LEVEL_3_COUNT = $e8Level3Count
+    $Global:E8_LEVEL_2_COUNT = $e8Level2Count
+    $Global:E8_LEVEL_1_COUNT = $e8Level1Count
+    $Global:E8_LEVEL_0_COUNT = $e8Level0Count
+    
+    # Generate content for each view
+    $overviewContent = Generate-E8MaturityContent -Level 'overview' -MaturityData $Global:Essential8Results
+    $level1Content = Generate-E8MaturityContent -Level 'level1' -MaturityData $Global:Essential8Results
+    $level2Content = Generate-E8MaturityContent -Level 'level2' -MaturityData $Global:Essential8Results
+    $level3Content = Generate-E8MaturityContent -Level 'level3' -MaturityData $Global:Essential8Results
+    
+    # Store content globally for template replacement
+    $Global:ESSENTIAL8_OVERVIEW_CONTENT = $overviewContent
+    $Global:ESSENTIAL8_LEVEL1_CONTENT = $level1Content
+    $Global:ESSENTIAL8_LEVEL2_CONTENT = $level2Content
+    $Global:ESSENTIAL8_LEVEL3_CONTENT = $level3Content
+    
+    return $overviewContent # Return overview for backward compatibility
+}
+
+function Generate-E8MaturityContent {
+    param(
+        [string]$Level,
+        [hashtable]$MaturityData
+    )
+    
+    $strategies = @(
+        @{ Key = 'ApplicationControl'; Name = 'Application Control'; Icon = '🔒' },
+        @{ Key = 'PatchApplications'; Name = 'Patch Applications'; Icon = '🔄' },
+        @{ Key = 'OfficeMacroSettings'; Name = 'Office Macro Settings'; Icon = '📄' },
+        @{ Key = 'UserApplicationHardening'; Name = 'User Application Hardening'; Icon = '🛡️' },
+        @{ Key = 'RestrictAdminPrivileges'; Name = 'Restrict Admin Privileges'; Icon = '👑' },
+        @{ Key = 'PatchOperatingSystems'; Name = 'Patch Operating Systems'; Icon = '💻' },
+        @{ Key = 'MultiFactor'; Name = 'Multi-Factor Authentication'; Icon = '🔐' },
+        @{ Key = 'RegularBackups'; Name = 'Regular Backups'; Icon = '💾' }
+    )
+    
+    $content = @()
+    
+    foreach ($strategy in $strategies) {
+        $key = $strategy.Key
+        $strategyData = $MaturityData[$key]
+        
+        if ($Level -eq 'overview') {
+            # Safely get maturity level with fallback
+            $maturityLevel = if ($strategyData -and $strategyData.ContainsKey('MaturityLevel')) {
+                $strategyData.MaturityLevel
+            } else {
+                0
+            }
+            
+            $statusClass = switch ($maturityLevel) {
+                3 { 'achieved' }
+                2 { 'achieved' }
+                1 { 'partial' }
+                0 { 'missing' }
+            }
+            $statusText = switch ($maturityLevel) {
+                3 { 'Level 3' }
+                2 { 'Level 2' }
+                1 { 'Level 1' }
+                0 { 'Not Implemented' }
+            }
+            
+            # Safely get details with fallback
+            $details = if ($strategyData -and $strategyData.Findings -and $strategyData.Findings.Count -gt 0) { 
+                $strategyData.Findings[0..2] -join '. ' + '.'
+            } else { 
+                "Assessment completed - see detailed view for findings." 
+            }
+            
+            $content += @"
+                        <div class="strategy-card">
+                            <div class="strategy-header">
+                                <div class="strategy-name">$($strategy.Icon) $($strategy.Name)</div>
+                                <div class="strategy-status $statusClass">$statusText</div>
+                            </div>
+                            <div class="strategy-details">$details</div>
+                            <div class="strategy-requirements">Maturity Score: $maturityLevel/3</div>
+                        </div>
+"@
+        } else {
+            # Generate level-specific content
+            $targetLevel = [int]$Level.Replace('level', '')
+            
+            # Safely get maturity level with fallback
+            $currentMaturity = if ($strategyData -and $strategyData.ContainsKey('MaturityLevel')) {
+                $strategyData.MaturityLevel
+            } else {
+                0
+            }
+            
+            $isAchieved = $currentMaturity -ge $targetLevel
+            $statusClass = if ($isAchieved) { 'achieved' } else { 'missing' }
+            $statusText = if ($isAchieved) { 'Achieved' } else { 'Missing' }
+            
+            $requirements = Get-E8Requirements -Strategy $key -Level $targetLevel
+            
+            # Safely get findings with fallback
+            $findings = if ($strategyData -and $strategyData.Findings -and $strategyData.Findings.Count -gt 0) { 
+                $strategyData.Findings -join '; ' 
+            } else { 
+                "No specific findings for this level." 
+            }
+            
+            $content += @"
+                        <div class="strategy-card">
+                            <div class="strategy-header">
+                                <div class="strategy-name">$($strategy.Icon) $($strategy.Name)</div>
+                                <div class="strategy-status $statusClass">$statusText</div>
+                            </div>
+                            <div class="strategy-details">$findings</div>
+                            <div class="strategy-requirements"><strong>Level $targetLevel Requirements:</strong> $requirements</div>
+                        </div>
+"@
+        }
+    }
+    
+    return $content -join "`n"
+}
+
+function Get-E8Requirements {
+    param(
+        [string]$Strategy,
+        [int]$Level
+    )
+    
+    $requirements = @{
+        'ApplicationControl' = @{
+            1 = 'Basic application whitelisting or WDAC policies implemented'
+            2 = 'Application control extended to servers and additional platforms'  
+            3 = 'Comprehensive application control with detailed logging and monitoring'
+        }
+        'PatchApplications' = @{
+            1 = 'Asset discovery and basic application patch management'
+            2 = 'Critical patches deployed within 48 hours'
+            3 = 'Automated patching with 48-hour deployment for critical vulnerabilities'
+        }
+        'OfficeMacroSettings' = @{
+            1 = 'Basic macro blocking for untrusted sources'
+            2 = 'Trusted locations and digital signature requirements'
+            3 = 'Digitally signed macros only, comprehensive policy enforcement'
+        }
+        'UserApplicationHardening' = @{
+            1 = 'Basic browser hardening and security settings'
+            2 = 'Application sandboxing and enhanced browser controls'
+            3 = 'Microsoft Defender Application Guard and comprehensive hardening'
+        }
+        'RestrictAdminPrivileges' = @{
+            1 = 'Privileged Identity Management (PIM) implementation'
+            2 = 'Enhanced Conditional Access for admin accounts'
+            3 = 'Privileged Access Workstations (PAW) and complete separation'
+        }
+        'PatchOperatingSystems' = @{
+            1 = 'OS discovery and basic update management'
+            2 = 'Critical OS patches deployed within 48 hours'
+            3 = 'Expedited update rings and automated security updates'
+        }
+        'MultiFactor' = @{
+            1 = 'Basic MFA for privileged accounts'
+            2 = 'MFA for all users'
+            3 = 'Phishing-resistant MFA (FIDO2, WHfB) for all users'
+        }
+        'RegularBackups' = @{
+            1 = 'Basic backup procedures in place'
+            2 = 'Daily backups with offsite storage'
+            3 = 'Tested backup recovery and business continuity procedures'
+        }
+    }
+    
+    return $requirements[$Strategy][$Level]
+}
+
+function Generate-Basic-Essential8Content {
+    Write-Host "Generating basic Essential 8 compliance content..." -ForegroundColor Yellow
+    
+    # Set default values for enhanced placeholders
+    $Global:E8_MATURITY = 0
+    $Global:E8_LEVEL_3_COUNT = 0
+    $Global:E8_LEVEL_2_COUNT = 0
+    $Global:E8_LEVEL_1_COUNT = 0
+    $Global:E8_LEVEL_0_COUNT = 8
+    $Global:ESSENTIAL8_OVERVIEW_CONTENT = "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 assessment data not available. Using basic assessment results.</div></div>"
+    $Global:ESSENTIAL8_LEVEL1_CONTENT = "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 Level 1 assessment not available.</div></div>"
+    $Global:ESSENTIAL8_LEVEL2_CONTENT = "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 Level 2 assessment not available.</div></div>"
+    $Global:ESSENTIAL8_LEVEL3_CONTENT = "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 Level 3 assessment not available.</div></div>"
     
     # Calculate Essential 8 compliance for each category
     $essential8Score = Calculate-Essential8Score
@@ -550,8 +790,8 @@ function Generate-HtmlReport {
     # Generate top recommendations
     $topRecommendations = Generate-TopRecommendations
     
-    # Generate Essential 8 content
-    $essential8Content = Generate-Essential8Content
+    # Generate Enhanced Essential 8 content
+    $essential8Content = Generate-Enhanced-Essential8Content
     $essential8Score = Calculate-Essential8Score
     
     # Generate findings content as tables (excluding Essential 8 findings)
@@ -666,6 +906,17 @@ function Generate-HtmlReport {
     $html = $html -replace '{{ESSENTIAL8_CONTENT}}', $essential8Content
     $html = $html -replace '{{FINDINGS_CONTENT}}', $findingsContent
     
+    # Replace Enhanced Essential 8 placeholders (with fallback values)
+    $html = $html -replace '{{ESSENTIAL8_MATURITY}}', $(if ($Global:E8_MATURITY) { $Global:E8_MATURITY } else { 0 })
+    $html = $html -replace '{{E8_LEVEL_3_COUNT}}', $(if ($Global:E8_LEVEL_3_COUNT) { $Global:E8_LEVEL_3_COUNT } else { 0 })
+    $html = $html -replace '{{E8_LEVEL_2_COUNT}}', $(if ($Global:E8_LEVEL_2_COUNT) { $Global:E8_LEVEL_2_COUNT } else { 0 })
+    $html = $html -replace '{{E8_LEVEL_1_COUNT}}', $(if ($Global:E8_LEVEL_1_COUNT) { $Global:E8_LEVEL_1_COUNT } else { 0 })
+    $html = $html -replace '{{E8_LEVEL_0_COUNT}}', $(if ($Global:E8_LEVEL_0_COUNT) { $Global:E8_LEVEL_0_COUNT } else { 8 })
+    $html = $html -replace '{{ESSENTIAL8_OVERVIEW_CONTENT}}', $(if ($Global:ESSENTIAL8_OVERVIEW_CONTENT) { $Global:ESSENTIAL8_OVERVIEW_CONTENT } else { "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 assessment data not available.</div></div>" })
+    $html = $html -replace '{{ESSENTIAL8_LEVEL1_CONTENT}}', $(if ($Global:ESSENTIAL8_LEVEL1_CONTENT) { $Global:ESSENTIAL8_LEVEL1_CONTENT } else { "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 Level 1 assessment not available.</div></div>" })
+    $html = $html -replace '{{ESSENTIAL8_LEVEL2_CONTENT}}', $(if ($Global:ESSENTIAL8_LEVEL2_CONTENT) { $Global:ESSENTIAL8_LEVEL2_CONTENT } else { "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 Level 2 assessment not available.</div></div>" })
+    $html = $html -replace '{{ESSENTIAL8_LEVEL3_CONTENT}}', $(if ($Global:ESSENTIAL8_LEVEL3_CONTENT) { $Global:ESSENTIAL8_LEVEL3_CONTENT } else { "<div class='strategy-card'><div class='strategy-details'>Enhanced Essential 8 Level 3 assessment not available.</div></div>" })
+    
     # Write to file
     $html | Out-File -FilePath $OutputPath -Encoding UTF8
     Write-Host "Enhanced HTML report generated: $OutputPath" -ForegroundColor Green
@@ -751,5 +1002,10 @@ Export-ModuleMember -Function @(
     'Generate-RemediationActions',
     'Generate-HtmlReport',
     'Generate-BasicHtmlReport',
-    'Show-Summary'
+    'Show-Summary',
+    'Generate-Enhanced-Essential8Content',
+    'Generate-Enhanced-Essential8MaturityContent',
+    'Generate-E8MaturityContent',
+    'Get-E8Requirements',
+    'Generate-Basic-Essential8Content'
 ) 

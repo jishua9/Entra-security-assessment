@@ -125,8 +125,8 @@
             opacity: 0.9;
         }
 
-        .critical { background-color: #dc2626; }
-        .high { background-color: #ea580c; }
+        .critical { background-color: #6f00ca; }
+        .high { background-color: #ea130c; }
         .medium { background-color: #d97706; }
         .low { background-color: #2563eb; }
         .good { background-color: #059669; }
@@ -360,7 +360,7 @@
         }
 
         .rec-priority.high {
-            background-color: #ea580c;
+            background-color: #ea130c;
             color: white;
         }
 
@@ -464,9 +464,238 @@
             border-left: 4px solid #10b981;
         }
 
+        /* Maturity Level Toggle Styles */
+        .maturity-controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin: 24px 0;
+            flex-wrap: wrap;
+        }
+
+        .maturity-toggle {
+            background: rgba(51, 65, 85, 0.6);
+            border: 1px solid rgba(71, 85, 105, 0.6);
+            color: #94a3b8;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .maturity-toggle:hover {
+            background: rgba(71, 85, 105, 0.8);
+            transform: translateY(-1px);
+        }
+
+        .maturity-toggle.active {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-color: #10b981;
+            color: white;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .maturity-view {
+            display: none;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        .maturity-view.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .maturity-overview {
+            background: rgba(51, 65, 85, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border-left: 4px solid #10b981;
+        }
+
+        .maturity-overview h4 {
+            color: #10b981;
+            font-size: 18px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .maturity-level-badge {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .strategy-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .strategy-card {
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 6px;
+            padding: 16px;
+            border: 1px solid rgba(51, 65, 85, 0.6);
+            transition: all 0.3s ease;
+        }
+
+        .strategy-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .strategy-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .strategy-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e2e8f0;
+            line-height: 1.3;
+        }
+
+        .strategy-status {
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            margin-left: 8px;
+        }
+
+        .strategy-status.achieved { background: #059669; color: white; }
+        .strategy-status.partial { background: #d97706; color: white; }
+        .strategy-status.missing { background: #dc2626; color: white; }
+
+        .strategy-details {
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+
+        .strategy-requirements {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .maturity-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .summary-metric {
+            background: rgba(51, 65, 85, 0.4);
+            border-radius: 6px;
+            padding: 16px;
+            text-align: center;
+            border: 1px solid rgba(71, 85, 105, 0.4);
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #10b981;
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
         .essential8-header {
             text-align: center;
             margin-bottom: 32px;
+            transition: margin-bottom 0.3s ease;
+        }
+
+        .essential8-header:hover {
+            background-color: rgba(51, 65, 85, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            margin: -16px -16px 16px -16px;
+        }
+
+        .essential8-toggle {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #10b981;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .essential8-toggle:hover {
+            background: rgba(16, 185, 129, 0.3);
+            transform: scale(1.05);
+        }
+
+        .essential8-content {
+            overflow: hidden;
+            transition: max-height 0.4s ease, opacity 0.3s ease;
+            max-height: 2000px;
+            opacity: 1;
+        }
+
+        .essential8-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0;
+        }
+
+        .e8-header-score {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #10b981;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .essential8-header h2 {
@@ -733,31 +962,140 @@
 
         <!-- Essential 8 Compliance Section -->
         <div class="essential8-section">
-            <div class="essential8-header">
-                <h2>🛡️ Essential 8 Security Framework Compliance</h2>
-                <p>The Essential 8 is a prioritised list of mitigation strategies to help organisations protect themselves against cyber threats.</p>
+            <div class="essential8-header" onclick="toggleEssential8()" style="cursor: pointer;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <h2>🛡️ Essential 8 Security Framework Assessment</h2>
+                        <span class="e8-header-score" id="e8-header-score" style="display: none;">{{ESSENTIAL8_MATURITY}}% Overall Maturity</span>
+                    </div>
+                    <button class="expand-toggle essential8-toggle" id="essential8-toggle">
+                        <span class="expand-icon">▼</span>
+                    </button>
+                </div>
+                <p>Enhanced assessment with 3 maturity levels for each Essential 8 strategy. Toggle between views to see your environment's compliance at different maturity levels.</p>
                 <div class="essential8-score">
-                    <span class="e8-score-number">{{ESSENTIAL8_SCORE}}%</span>
-                    <span class="e8-score-label">Compliant</span>
+                    <span class="e8-score-number">{{ESSENTIAL8_MATURITY}}%</span>
+                    <span class="e8-score-label">Overall Maturity</span>
                 </div>
             </div>
             
-            <div class="essential8-grid">
-                {{ESSENTIAL8_CONTENT}}
-            </div>
-            
-            <div class="essential8-legend">
-                <div class="legend-item">
-                    <span class="legend-dot compliant"></span>
-                    <span>Compliant - Controls implemented and effective</span>
+            <div class="essential8-content" id="essential8-content">
+                <!-- Maturity Level Toggle Controls -->
+                <div class="maturity-controls">
+                    <button class="maturity-toggle active" onclick="showMaturityLevel('overview')" id="toggle-overview">
+                        📊 Overview
+                    </button>
+                    <button class="maturity-toggle" onclick="showMaturityLevel('level1')" id="toggle-level1">
+                        🟡 Level 1 (Basic)
+                    </button>
+                    <button class="maturity-toggle" onclick="showMaturityLevel('level2')" id="toggle-level2">
+                        🟠 Level 2 (Standard)
+                    </button>
+                    <button class="maturity-toggle" onclick="showMaturityLevel('level3')" id="toggle-level3">
+                        🟢 Level 3 (Advanced)
+                    </button>
                 </div>
-                <div class="legend-item">
-                    <span class="legend-dot partial"></span>
-                    <span>Partially Compliant - Some controls in place, improvements needed</span>
+
+                <!-- Overview Maturity View -->
+                <div class="maturity-view active" id="maturity-overview">
+                    <div class="maturity-overview">
+                        <h4>
+                            <span class="maturity-level-badge">Overall Assessment</span>
+                            Essential 8 Maturity Breakdown
+                        </h4>
+                        <p style="color: #94a3b8; margin-bottom: 16px;">
+                            Your environment's maturity across all 8 security strategies. Each strategy is assessed on a scale of 0-3.
+                        </p>
+                        
+                        <div class="maturity-summary">
+                            <div class="summary-metric">
+                                <div class="metric-value">{{E8_LEVEL_3_COUNT}}</div>
+                                <div class="metric-label">Level 3 (Advanced)</div>
+                            </div>
+                            <div class="summary-metric">
+                                <div class="metric-value">{{E8_LEVEL_2_COUNT}}</div>
+                                <div class="metric-label">Level 2 (Standard)</div>
+                            </div>
+                            <div class="summary-metric">
+                                <div class="metric-value">{{E8_LEVEL_1_COUNT}}</div>
+                                <div class="metric-label">Level 1 (Basic)</div>
+                            </div>
+                            <div class="summary-metric">
+                                <div class="metric-value">{{E8_LEVEL_0_COUNT}}</div>
+                                <div class="metric-label">Not Implemented</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="strategy-breakdown">
+                        {{ESSENTIAL8_OVERVIEW_CONTENT}}
+                    </div>
                 </div>
-                <div class="legend-item">
-                    <span class="legend-dot non-compliant"></span>
-                    <span>Non-Compliant - Controls missing or ineffective</span>
+
+                <!-- Level 1 Maturity View -->
+                <div class="maturity-view" id="maturity-level1">
+                    <div class="maturity-overview">
+                        <h4>
+                            <span class="maturity-level-badge">Level 1</span>
+                            Basic Security Controls Assessment
+                        </h4>
+                        <p style="color: #94a3b8; margin-bottom: 16px;">
+                            Foundational security controls that provide basic protection. These are the minimum recommended security measures.
+                        </p>
+                    </div>
+                    
+                    <div class="strategy-breakdown">
+                        {{ESSENTIAL8_LEVEL1_CONTENT}}
+                    </div>
+                </div>
+
+                <!-- Level 2 Maturity View -->
+                <div class="maturity-view" id="maturity-level2">
+                    <div class="maturity-overview">
+                        <h4>
+                            <span class="maturity-level-badge">Level 2</span>
+                            Standard Security Controls Assessment
+                        </h4>
+                        <p style="color: #94a3b8; margin-bottom: 16px;">
+                            Enhanced security controls that provide stronger protection against common attack vectors and sophisticated threats.
+                        </p>
+                    </div>
+                    
+                    <div class="strategy-breakdown">
+                        {{ESSENTIAL8_LEVEL2_CONTENT}}
+                    </div>
+                </div>
+
+                <!-- Level 3 Maturity View -->
+                <div class="maturity-view" id="maturity-level3">
+                    <div class="maturity-overview">
+                        <h4>
+                            <span class="maturity-level-badge">Level 3</span>
+                            Advanced Security Controls Assessment
+                        </h4>
+                        <p style="color: #94a3b8; margin-bottom: 16px;">
+                            Comprehensive security controls that provide maximum protection against advanced persistent threats and nation-state actors.
+                        </p>
+                    </div>
+                    
+                    <div class="strategy-breakdown">
+                        {{ESSENTIAL8_LEVEL3_CONTENT}}
+                    </div>
+                </div>
+                
+                <div class="essential8-legend" style="margin-top: 32px;">
+                    <div class="legend-item">
+                        <span class="legend-dot" style="background: #059669;"></span>
+                        <span>Achieved - Controls implemented at this maturity level</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="background: #d97706;"></span>
+                        <span>Partial - Some controls in place, gaps identified</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="background: #dc2626;"></span>
+                        <span>Missing - Controls not implemented at this level</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -812,6 +1150,25 @@
             icon.classList.toggle('rotated');
         }
 
+        // Toggle Essential 8 section
+        function toggleEssential8() {
+            const content = document.getElementById('essential8-content');
+            const icon = document.querySelector('#essential8-toggle .expand-icon');
+            const headerScore = document.getElementById('e8-header-score');
+            
+            content.classList.toggle('collapsed');
+            
+            if (content.classList.contains('collapsed')) {
+                icon.textContent = '▶';
+                icon.style.transform = 'rotate(0deg)';
+                headerScore.style.display = 'inline-block';
+            } else {
+                icon.textContent = '▼';
+                icon.style.transform = 'rotate(0deg)';
+                headerScore.style.display = 'none';
+            }
+        }
+
         // Toggle recommendation details
         function toggleRecommendation(element) {
             const details = element.parentElement.querySelector('.rec-details');
@@ -822,6 +1179,26 @@
                 if (icon) {
                     icon.classList.toggle('rotated');
                 }
+            }
+        }
+
+        // Show maturity level view
+        function showMaturityLevel(level) {
+            // Hide all maturity views
+            const views = document.querySelectorAll('.maturity-view');
+            views.forEach(view => view.classList.remove('active'));
+            
+            // Remove active class from all toggles
+            const toggles = document.querySelectorAll('.maturity-toggle');
+            toggles.forEach(toggle => toggle.classList.remove('active'));
+            
+            // Show selected view
+            if (level === 'overview') {
+                document.getElementById('maturity-overview').classList.add('active');
+                document.getElementById('toggle-overview').classList.add('active');
+            } else {
+                document.getElementById('maturity-' + level).classList.add('active');
+                document.getElementById('toggle-' + level).classList.add('active');
             }
         }
 

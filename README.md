@@ -593,4 +593,72 @@ For issues, questions, or feature requests:
 
 ---
 
-**⚠️ Important Note**: This tool provides security assessments and recommendations but should be used alongside comprehensive security planning and professional security advice. Always test changes in a non-production environment first. The interactive recommendations include PowerShell commands - review and test these carefully before execution in production environments. 
+**⚠️ Important Note**: This tool provides security assessments and recommendations but should be used alongside comprehensive security planning and professional security advice. Always test changes in a non-production environment first. The interactive recommendations include PowerShell commands - review and test these carefully before execution in production environments.
+
+## Enhanced Essential 8 Maturity Assessment
+
+The Azure Entra Security Assessment tool now includes enhanced Essential 8 assessments with **3 maturity levels** for each security strategy:
+
+### Maturity Levels
+- **Level 0**: Not Implemented - No controls in place
+- **Level 1**: Basic - Foundational security controls implemented  
+- **Level 2**: Standard - Enhanced controls providing stronger protection
+- **Level 3**: Advanced - Comprehensive controls against sophisticated threats
+
+### Interactive Report Features
+The HTML report includes interactive toggles that allow you to:
+
+- **📊 Overview**: See overall maturity across all 8 strategies
+- **🟡 Level 1 (Basic)**: View your environment's compliance with basic security controls
+- **🟠 Level 2 (Standard)**: Check compliance with standard security controls
+- **🟢 Level 3 (Advanced)**: Assess advanced security control implementation
+
+### Enhanced Assessment Coverage
+
+1. **Application Control**
+   - L1: Basic WDAC/AppLocker policies on workstations
+   - L2: Extended to servers and additional platforms
+   - L3: Comprehensive coverage with detailed logging
+
+2. **Patch Applications** 
+   - L1: Asset discovery and basic patch management
+   - L2: Critical patches deployed within 48 hours
+   - L3: Automated patching with expedited deployment
+
+3. **Office Macro Settings**
+   - L1: Basic macro blocking for untrusted sources
+   - L2: Trusted locations and digital signature requirements
+   - L3: Digitally signed macros only with comprehensive policies
+
+4. **User Application Hardening**
+   - L1: Basic browser hardening and security settings
+   - L2: Application sandboxing and enhanced browser controls
+   - L3: Microsoft Defender Application Guard implementation
+
+5. **Restrict Administrative Privileges**
+   - L1: Privileged Identity Management (PIM) implementation
+   - L2: Enhanced Conditional Access for admin accounts
+   - L3: Privileged Access Workstations (PAW) and complete separation
+
+6. **Patch Operating Systems**
+   - L1: OS discovery and basic update management
+   - L2: Critical OS patches deployed within 48 hours
+   - L3: Expedited update rings and automated security updates
+
+7. **Multi-Factor Authentication**
+   - L1: Basic MFA for privileged accounts
+   - L2: MFA for all users
+   - L3: Phishing-resistant MFA (FIDO2, Windows Hello) for all users
+
+8. **Regular Backups**
+   - L1: Basic backup procedures in place
+   - L2: Daily backups with offsite storage
+   - L3: Tested backup recovery and business continuity procedures
+
+### Maturity Scoring
+- Each strategy is scored 0-3 based on implemented controls
+- Overall maturity percentage calculated from total scores (max 24 points)
+- Visual indicators show achieved/partial/missing status for each level
+- Interactive toggles help prioritize security improvements
+
+This enhanced assessment provides a clear roadmap for security maturity progression aligned with the official ACSC Essential 8 framework. 
