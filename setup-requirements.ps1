@@ -15,7 +15,10 @@ $requiredModules = @(
     @{ Name = 'Microsoft.Graph.Groups'; Description = 'Group management' },
     @{ Name = 'Microsoft.Graph.DeviceManagement'; Description = 'Device management' },
     @{ Name = 'Microsoft.Graph.Applications'; Description = 'Application registration management' },
-    @{ Name = 'Microsoft.Graph.Reports'; Description = 'Audit logs and reporting' }
+    @{ Name = 'Microsoft.Graph.Reports'; Description = 'Audit logs and reporting' },
+    @{ Name = 'Microsoft.Graph.DeviceManagement.Enrolment'; Description = 'Intune device enrollment' },
+    @{ Name = 'Microsoft.Graph.DeviceManagement.Actions'; Description = 'Intune device management actions' },
+    @{ Name = 'Microsoft.Graph.Security'; Description = 'Security policies and information protection' }
 )
 
 Write-Host "`nChecking PowerShell execution policy..." -ForegroundColor Yellow

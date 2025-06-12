@@ -171,6 +171,114 @@ The tool performs comprehensive security assessments across multiple areas using
   - Domain validation and configuration
   - Directory synchronization status
 
+## 🛡️ Essential 8 Security Framework Integration
+
+The tool now includes comprehensive **Essential 8** compliance assessments alongside standard Azure Entra security checks. The Essential 8 is an Australian Cyber Security Centre (ACSC) framework focusing on 8 key mitigation strategies.
+
+### **Essential 8 Categories Assessed**
+
+#### **1. Application Control** 
+- **Checks:**
+  - Application consent policies configuration
+  - Intune application protection policies
+  - Enterprise app creation restrictions
+  - Mobile application management (MAM) policies
+- **Cloud Context:** Controls which applications can be installed and run on managed devices
+
+#### **2. Patch Applications**
+- **Checks:**
+  - Microsoft 365 Apps update policies
+  - Intune application update configurations
+  - Microsoft Store for Business app management
+  - Device configuration policies for app updates
+- **Cloud Context:** Ensures applications are kept up-to-date with security patches
+
+#### **3. Configure Microsoft Office Macro Settings**
+- **Checks:**
+  - Office configuration policies via Intune
+  - Administrative templates for Office security
+  - Group Policy configurations through Intune
+  - Microsoft 365 Security & Compliance policies
+- **Cloud Context:** Controls macro execution and Office security settings
+
+#### **4. User Application Hardening**
+- **Checks:**
+  - Browser security policies (Edge, Chrome)
+  - Endpoint protection configurations
+  - Application protection policies
+  - Security baseline compliance
+- **Cloud Context:** Hardens user-facing applications against attacks
+
+#### **5. Restrict Administrative Privileges**
+- **Enhanced Checks:**
+  - Privileged Identity Management (PIM) configuration
+  - Administrative workstation policies
+  - Conditional Access policies for admin roles
+  - Just-in-time access controls
+- **Cloud Context:** Builds on standard privilege analysis with Essential 8 focus
+
+#### **6. Patch Operating Systems**
+- **Checks:**
+  - Windows Update for Business policies
+  - Device compliance policies for OS versions
+  - Update ring configurations
+  - OS security baseline compliance
+- **Cloud Context:** Ensures operating systems receive timely security updates
+
+#### **7. Multi-Factor Authentication**
+- **Enhanced Analysis:**
+  - References standard MFA assessment
+  - Passwordless authentication methods
+  - Advanced MFA capabilities (FIDO2, Windows Hello)
+  - Authentication strength policies
+- **Cloud Context:** Builds on existing comprehensive MFA analysis
+
+#### **8. Regular Backups**
+- **Checks:**
+  - Azure Backup policies
+  - Microsoft 365 data protection policies
+  - OneDrive backup configurations
+  - Device backup policies
+  - Data retention settings
+- **Cloud Context:** Ensures data protection and recovery capabilities
+
+### **Essential 8 Compliance Scoring**
+
+The tool provides a dedicated **Essential 8 compliance score** alongside the main security score:
+
+- **Compliant Categories**: Fully meeting Essential 8 requirements
+- **Partially Compliant**: Some controls in place but improvements needed  
+- **Non-Compliant**: Essential 8 requirements not met
+
+**Compliance Levels:**
+- **75%+ Compliance**: Excellent Essential 8 posture
+- **50-74% Compliance**: Good foundation with some gaps
+- **<50% Compliance**: Significant Essential 8 improvements needed
+
+### **Essential 8 Reporting Features**
+
+- **Separate Essential 8 section** in console output with dedicated scoring
+- **Category breakdown** showing compliance status per Essential 8 area
+- **Integrated recommendations** linking Essential 8 gaps to remediation steps
+- **HTML report integration** with Essential 8 findings alongside standard security checks
+
+### **License and Permission Requirements for Essential 8**
+
+Many Essential 8 checks require additional Microsoft licensing:
+
+| Essential 8 Category | Required Licenses | API Permissions |
+|---------------------|-------------------|-----------------|
+| Application Control | Intune, Azure AD Premium | `DeviceManagementApps.Read.All` |
+| Patch Applications | Intune | `DeviceManagementConfiguration.Read.All` |
+| Office Macro Settings | Intune, Microsoft 365 | `DeviceManagementConfiguration.Read.All` |
+| User App Hardening | Intune, Defender for Endpoint | `DeviceManagementConfiguration.Read.All` |
+| Restrict Admin Privileges | Azure AD Premium P2 (PIM) | `RoleManagement.Read.All` |
+| Patch Operating Systems | Intune | `DeviceManagementConfiguration.Read.All` |
+| Multi-Factor Authentication | Azure AD Premium | `Policy.Read.All` |
+| Regular Backups | Azure Backup, Microsoft 365 | `InformationProtectionPolicy.Read.All` |
+
+**Note:** The tool gracefully handles missing licenses and will indicate which features require additional licensing.
+
 ## 🚀 Quick Start
 
 ### **1. Setup Requirements**
