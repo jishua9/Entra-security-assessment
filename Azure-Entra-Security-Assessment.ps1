@@ -928,6 +928,155 @@ function Generate-KeyInsights {
     return $insights -join "`n"
 }
 
+function Generate-TopRecommendations {
+    Write-Host "Generating top priority recommendations..." -ForegroundColor Yellow
+    
+    # Define potential score impacts for different finding types
+    $scoreImpacts = @{
+        'Critical' = 12
+        'High' = 8
+        'Medium' = 4
+        'Low' = 2
+    }
+    
+    # Collect all actionable findings with their potential impact
+    $actionableFindings = @()
+    
+    foreach ($severity in @('Critical', 'High', 'Medium', 'Low')) {
+        foreach ($finding in $script:AssessmentResults[$severity]) {
+            $impact = $scoreImpacts[$severity]
+            $shortRecommendation = Get-ShortRecommendation -Finding $finding
+            
+            if ($shortRecommendation) {
+                $actionableFindings += @{
+                    Severity = $severity
+                    Finding = $finding
+                    Impact = $impact
+                    ShortRecommendation = $shortRecommendation
+                    Priority = Get-FindingPriority -Finding $finding -Severity $severity
+                }
+            }
+        }
+    }
+    
+    # Sort by priority (highest impact first, then by severity)
+    $topFindings = $actionableFindings | Sort-Object Priority, { $scoreImpacts[$_.Severity] } -Descending | Select-Object -First 5
+    
+    # Generate HTML for top recommendations
+    $recommendationsHtml = @()
+    foreach ($item in $topFindings) {
+        $severityClass = $item.Severity.ToLower()
+        $severityLabel = switch ($item.Severity) {
+            'Critical' { 'CRIT' }
+            'High' { 'HIGH' }
+            'Medium' { 'MED' }
+            'Low' { 'LOW' }
+        }
+        
+        $recommendationsHtml += @"
+                        <div class="recommendation-item">
+                            <div class="rec-priority $severityClass">$severityLabel</div>
+                            <div class="rec-text">
+                                $($item.ShortRecommendation)
+                                <div class="score-impact">+$($item.Impact) points</div>
+                            </div>
+                        </div>
+"@
+    }
+    
+    if ($recommendationsHtml.Count -eq 0) {
+        return '<div class="recommendation-item"><div class="rec-priority good" style="background-color: #059669;">GOOD</div><div class="rec-text">No critical improvements identified<div class="score-impact">Maintain current practices</div></div></div>'
+    }
+    
+    return $recommendationsHtml -join "`n"
+}
+
+function Get-ShortRecommendation {
+    param($Finding)
+    
+    # Extract actionable short recommendations based on finding patterns
+    switch -Wildcard ($Finding.Finding) {
+        "*MFA*configured*" {
+            if ($Finding.Finding -like "*2.94%*" -or $Finding.Finding -match '\d+\.\d+%.*MFA') {
+                return "Implement mandatory MFA for all users (currently low adoption)"
+            }
+        }
+        "*Security Defaults are disabled*" {
+            return "Enable Security Defaults or expand Conditional Access policies"
+        }
+        "*Exchange Administrator has no members*" {
+            return "Assign break-glass admin to Exchange Administrator role"
+        }
+        "*Global Administrator has*members*" {
+            if ($Finding.Finding -match '(\d+) members') {
+                $count = $matches[1]
+                if ([int]$count -gt 5) {
+                    return "Review $count Global Administrator assignments"
+                }
+            }
+        }
+        "*Guest users can create*" {
+            return "Restrict guest user permissions"
+        }
+        "*All users can invite guests*" {
+            return "Restrict guest invitations to admins only"
+        }
+        "*applications have no assigned owners*" {
+            return "Assign owners to orphaned applications"
+        }
+        "*expired*" {
+            return "Renew expired application credentials"
+        }
+        "*No devices registered*" {
+            return "Implement device registration and management"
+        }
+        "*failed sign-ins*" {
+            if ($Finding.Finding -match '(\d+\.\d+)%') {
+                return "Investigate failed sign-in patterns ($($matches[1])%)"
+            }
+        }
+        "*legacy authentication*" {
+            return "Block legacy authentication protocols"
+        }
+        "*risky users*" {
+            return "Review and remediate risky user accounts"
+        }
+        default {
+            # Return null for non-actionable findings
+            return $null
+        }
+    }
+    
+    return $null
+}
+
+function Get-FindingPriority {
+    param($Finding, $Severity)
+    
+    # Assign priority scores (higher = more important)
+    $basePriority = switch ($Severity) {
+        'Critical' { 1000 }
+        'High' { 500 }
+        'Medium' { 100 }
+        'Low' { 50 }
+    }
+    
+    # Boost priority for high-impact security findings
+    $priorityBoost = 0
+    switch -Wildcard ($Finding.Finding) {
+        "*MFA*" { $priorityBoost += 200 }  # MFA is critical
+        "*Exchange Administrator has no members*" { $priorityBoost += 150 }  # Break-glass access
+        "*Security Defaults*" { $priorityBoost += 100 }  # Basic security
+        "*expired*" { $priorityBoost += 175 }  # Service disruption risk
+        "*Global Administrator*" { $priorityBoost += 125 }  # Privileged access
+        "*legacy authentication*" { $priorityBoost += 150 }  # Security bypass
+        "*risky users*" { $priorityBoost += 180 }  # Active threats
+        default { $priorityBoost += 0 }
+    }
+    
+    return $basePriority + $priorityBoost
+}
+
 function Generate-RemediationActions {
     param($Finding)
     
@@ -976,6 +1125,9 @@ function Generate-HtmlReport {
     
     # Generate insights
     $insights = Generate-KeyInsights
+    
+    # Generate top recommendations
+    $topRecommendations = Generate-TopRecommendations
     
     # Generate findings content as tables
     $findingsContent = ""
@@ -1079,6 +1231,7 @@ function Generate-HtmlReport {
     $html = $html -replace '{{LOW_COUNT}}', $script:AssessmentResults.Low.Count
     $html = $html -replace '{{GOOD_COUNT}}', $script:AssessmentResults.Good.Count
     $html = $html -replace '{{INSIGHTS_CONTENT}}', $insights
+    $html = $html -replace '{{TOP_RECOMMENDATIONS}}', $topRecommendations
     $html = $html -replace '{{FINDINGS_CONTENT}}', $findingsContent
     
     # Write to file

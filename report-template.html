@@ -328,6 +328,66 @@
             margin: 16px 0;
         }
 
+        .top-recommendations {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .recommendation-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 12px;
+            background-color: rgba(51, 65, 85, 0.4);
+            border-radius: 6px;
+            border-left: 2px solid transparent;
+        }
+
+        .recommendation-item:hover {
+            background-color: rgba(51, 65, 85, 0.6);
+        }
+
+        .rec-priority {
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-align: center;
+            min-width: 35px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .rec-priority.high {
+            background-color: #ea580c;
+            color: white;
+        }
+
+        .rec-priority.medium {
+            background-color: #d97706;
+            color: white;
+        }
+
+        .rec-priority.critical {
+            background-color: #dc2626;
+            color: white;
+        }
+
+        .rec-text {
+            font-size: 12px;
+            color: #e2e8f0;
+            line-height: 1.4;
+            flex: 1;
+        }
+
+        .score-impact {
+            font-size: 10px;
+            color: #10b981;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
         @media (max-width: 768px) {
             .summary-section {
                 grid-template-columns: 1fr;
@@ -396,6 +456,13 @@
                     <div class="stat-item good">
                         <div class="stat-number">{{GOOD_COUNT}}</div>
                         <div class="stat-label">Good</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 24px;">
+                    <h4 style="color: #fb923c; font-size: 14px; font-weight: 600; margin-bottom: 12px;">🎯 Top Priority Actions</h4>
+                    <div class="top-recommendations">
+                        {{TOP_RECOMMENDATIONS}}
                     </div>
                 </div>
             </div>
