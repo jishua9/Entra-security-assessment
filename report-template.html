@@ -600,6 +600,81 @@
             color: #64748b;
         }
 
+        .strategy-summary {
+            font-size: 13px;
+            color: #e2e8f0;
+            font-weight: 600;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+            padding-bottom: 8px;
+        }
+
+        .strategy-checks {
+            margin-top: 12px;
+        }
+
+        .check-item {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(30, 41, 59, 0.6);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .check-item:hover {
+            background: rgba(15, 23, 42, 0.6);
+            border-color: rgba(51, 65, 85, 0.8);
+        }
+
+        .check-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .check-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .check-status-icon {
+            font-size: 14px;
+            margin-right: 8px;
+        }
+
+        .check-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e2e8f0;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .check-status {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .check-status.check-achieved { background: #059669; color: white; }
+        .check-status.check-partial { background: #d97706; color: white; }
+        .check-status.check-missing { background: #dc2626; color: white; }
+        .check-status.check-unknown { background: #475569; color: white; }
+
+        .check-description {
+            font-size: 11px;
+            color: #94a3b8;
+            line-height: 1.4;
+            margin-left: 22px;
+        }
+
         .maturity-summary {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

@@ -236,7 +236,7 @@ function Generate-E8MaturityContent {
                         </div>
 "@
         } else {
-            # Generate level-specific content
+            # Generate level-specific content with detailed checks
             $targetLevel = [int]$Level.Replace('level', '')
             
             # Safely get maturity level with fallback
@@ -253,10 +253,43 @@ function Generate-E8MaturityContent {
             $requirements = Get-E8Requirements -Strategy $key -Level $targetLevel
             
             # Safely get findings with fallback
-            $findings = if ($strategyData -and $strategyData.Findings -and $strategyData.Findings.Count -gt 0) { 
-                $strategyData.Findings -join '; ' 
+            $strategyFindings = if ($strategyData -and $strategyData.Findings -and $strategyData.Findings.Count -gt 0) { 
+                $strategyData.Findings
             } else { 
-                "No specific findings for this level." 
+                @("No specific findings for this level.")
+            }
+            
+            # Generate detailed checks list with status indicators
+            $checksHtml = ""
+            if ($requirements -and $requirements.Count -gt 0) {
+                $checksHtml = "<div class='strategy-checks'>"
+                foreach ($check in $requirements) {
+                    $checkStatus = Get-E8CheckStatus -Strategy $key -RequirementCheck $check -StrategyFindings $strategyFindings
+                    $statusIcon = switch ($checkStatus) {
+                        'Achieved' { '✅' }
+                        'Partial' { '⚠️' }
+                        'Missing' { '❌' }
+                        default { '❓' }
+                    }
+                    $statusColorClass = switch ($checkStatus) {
+                        'Achieved' { 'check-achieved' }
+                        'Partial' { 'check-partial' }
+                        'Missing' { 'check-missing' }
+                        default { 'check-unknown' }
+                    }
+                    
+                    $checksHtml += @"
+                    <div class="check-item">
+                        <div class="check-header">
+                            <span class="check-status-icon">$statusIcon</span>
+                            <span class="check-name">$($check.Name)</span>
+                            <span class="check-status $statusColorClass">$checkStatus</span>
+                        </div>
+                        <div class="check-description">$($check.Description)</div>
+                    </div>
+"@
+                }
+                $checksHtml += "</div>"
             }
             
             $content += @"
@@ -265,8 +298,8 @@ function Generate-E8MaturityContent {
                                 <div class="strategy-name">$($strategy.Icon) $($strategy.Name)</div>
                                 <div class="strategy-status $statusClass">$statusText</div>
                             </div>
-                            <div class="strategy-details">$findings</div>
-                            <div class="strategy-requirements"><strong>Level $targetLevel Requirements:</strong> $requirements</div>
+                            <div class="strategy-summary">Level $targetLevel Maturity Requirements:</div>
+                            $checksHtml
                         </div>
 "@
         }
@@ -283,48 +316,175 @@ function Get-E8Requirements {
     
     $requirements = @{
         'ApplicationControl' = @{
-            1 = 'Basic application whitelisting or WDAC policies implemented'
-            2 = 'Application control extended to servers and additional platforms'  
-            3 = 'Comprehensive application control with detailed logging and monitoring'
+            1 = @(
+                @{ Name = "Application control implemented on workstations"; Description = "WDAC or AppLocker policies configured for workstation devices"; Status = "Unknown" },
+                @{ Name = "Allowlist-based application execution"; Description = "Only approved applications can execute on workstations"; Status = "Unknown" },
+                @{ Name = "Application control policies active"; Description = "Policies deployed and enforced across workstation fleet"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "Application control extended to internet-facing servers"; Description = "Server-specific application control policies implemented"; Status = "Unknown" },
+                @{ Name = "Comprehensive application allowlisting"; Description = "Detailed allowlists for both workstations and servers"; Status = "Unknown" },
+                @{ Name = "Server application policies configured"; Description = "Dedicated policies for server environments"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Application control on all systems including network devices"; Description = "Universal application control across all device types"; Status = "Unknown" },
+                @{ Name = "Mobile device application management"; Description = "Mobile app policies and controls implemented"; Status = "Unknown" },
+                @{ Name = "Comprehensive coverage across device types"; Description = "Application control spans workstations, servers, mobile, and network devices"; Status = "Unknown" }
+            )
         }
         'PatchApplications' = @{
-            1 = 'Asset discovery and basic application patch management'
-            2 = 'Critical patches deployed within 48 hours'
-            3 = 'Automated patching with 48-hour deployment for critical vulnerabilities'
+            1 = @(
+                @{ Name = "Automated asset discovery implemented"; Description = "Automated discovery and inventory of applications across the environment"; Status = "Unknown" },
+                @{ Name = "Application inventory maintained"; Description = "Up-to-date inventory of all applications and versions"; Status = "Unknown" },
+                @{ Name = "Vulnerability scanning configured"; Description = "Regular scanning for application vulnerabilities"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "Patch management for critical vulnerabilities"; Description = "Automated patching process for critical application vulnerabilities"; Status = "Unknown" },
+                @{ Name = "Windows Update for Business policies"; Description = "WUfB policies configured for application updates"; Status = "Unknown" },
+                @{ Name = "Automated patch deployment"; Description = "Automated deployment of application patches"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Expedited patch deployment (48-hour)"; Description = "Critical patches deployed within 48 hours of release"; Status = "Unknown" },
+                @{ Name = "Update rings for critical patches"; Description = "Expedited update rings for rapid critical patch deployment"; Status = "Unknown" },
+                @{ Name = "Comprehensive patch management"; Description = "Full lifecycle patch management with rapid response capability"; Status = "Unknown" }
+            )
         }
         'OfficeMacroSettings' = @{
-            1 = 'Basic macro blocking for untrusted sources'
-            2 = 'Trusted locations and digital signature requirements'
-            3 = 'Digitally signed macros only, comprehensive policy enforcement'
+            1 = @(
+                @{ Name = "Office macro execution restricted"; Description = "Basic restrictions on macro execution in Office applications"; Status = "Unknown" },
+                @{ Name = "Only signed macros allowed"; Description = "Digital signature requirement for macro execution"; Status = "Unknown" },
+                @{ Name = "Macro security policies configured"; Description = "Security policies controlling macro behavior"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "Macros disabled except from trusted locations"; Description = "Macros only allowed from specific trusted locations"; Status = "Unknown" },
+                @{ Name = "Digital signature verification"; Description = "Enhanced verification of macro digital signatures"; Status = "Unknown" },
+                @{ Name = "Enhanced macro restrictions"; Description = "Stricter controls on macro execution and capabilities"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Macros completely disabled or isolated"; Description = "Macros either completely disabled or executed in isolation"; Status = "Unknown" },
+                @{ Name = "Application sandboxing"; Description = "Office applications run in sandboxed environments"; Status = "Unknown" },
+                @{ Name = "Zero-trust macro execution"; Description = "No macro execution without explicit approval and isolation"; Status = "Unknown" }
+            )
         }
         'UserApplicationHardening' = @{
-            1 = 'Basic browser hardening and security settings'
-            2 = 'Application sandboxing and enhanced browser controls'
-            3 = 'Microsoft Defender Application Guard and comprehensive hardening'
+            1 = @(
+                @{ Name = "Web browser security hardening"; Description = "Basic security hardening of web browsers"; Status = "Unknown" },
+                @{ Name = "Flash and Java disabled"; Description = "Legacy plugins disabled in browsers"; Status = "Unknown" },
+                @{ Name = "Basic application hardening"; Description = "Fundamental security hardening of user applications"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "Enhanced browser security features"; Description = "Advanced browser security features enabled"; Status = "Unknown" },
+                @{ Name = "Application isolation configured"; Description = "User applications run with isolation controls"; Status = "Unknown" },
+                @{ Name = "Comprehensive hardening policies"; Description = "Extensive hardening across all user applications"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Application sandboxing implemented"; Description = "Full sandboxing of user applications"; Status = "Unknown" },
+                @{ Name = "Advanced isolation techniques"; Description = "Advanced application isolation and containment"; Status = "Unknown" },
+                @{ Name = "Zero-trust application execution"; Description = "Applications run with zero-trust security model"; Status = "Unknown" }
+            )
         }
         'RestrictAdminPrivileges' = @{
-            1 = 'Privileged Identity Management (PIM) implementation'
-            2 = 'Enhanced Conditional Access for admin accounts'
-            3 = 'Privileged Access Workstations (PAW) and complete separation'
+            1 = @(
+                @{ Name = "Privileged accounts identified"; Description = "All privileged accounts discovered and catalogued"; Status = "Unknown" },
+                @{ Name = "Admin rights restricted"; Description = "Administrative rights limited to necessary personnel"; Status = "Unknown" },
+                @{ Name = "Basic privilege management"; Description = "Fundamental controls on administrative privileges"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "Privileged access management implemented"; Description = "Comprehensive PAM solution deployed"; Status = "Unknown" },
+                @{ Name = "Just-in-time access configured"; Description = "JIT access controls for administrative privileges"; Status = "Unknown" },
+                @{ Name = "Enhanced privilege restrictions"; Description = "Advanced controls and monitoring of privileged access"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Zero standing privileges"; Description = "No permanent administrative privileges granted"; Status = "Unknown" },
+                @{ Name = "Comprehensive PAM solution"; Description = "Full-featured privileged access management platform"; Status = "Unknown" },
+                @{ Name = "Advanced privilege governance"; Description = "Complete governance and oversight of all privileged access"; Status = "Unknown" }
+            )
         }
         'PatchOperatingSystems' = @{
-            1 = 'OS discovery and basic update management'
-            2 = 'Critical OS patches deployed within 48 hours'
-            3 = 'Expedited update rings and automated security updates'
+            1 = @(
+                @{ Name = "OS asset discovery implemented"; Description = "Automated discovery and inventory of operating systems"; Status = "Unknown" },
+                @{ Name = "Operating system inventory"; Description = "Complete inventory of OS versions and patch levels"; Status = "Unknown" },
+                @{ Name = "Vulnerability scanning for OS"; Description = "Regular vulnerability scanning of operating systems"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "OS patch management configured"; Description = "Automated OS patch management system implemented"; Status = "Unknown" },
+                @{ Name = "Critical vulnerability patching"; Description = "Automated patching of critical OS vulnerabilities"; Status = "Unknown" },
+                @{ Name = "Automated OS updates"; Description = "Windows Update for Business managing OS updates"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Expedited OS patching (48-hour)"; Description = "Critical OS patches deployed within 48 hours"; Status = "Unknown" },
+                @{ Name = "Critical patch deployment rings"; Description = "Update rings supporting rapid critical OS patch deployment"; Status = "Unknown" },
+                @{ Name = "Comprehensive OS patch management"; Description = "Complete OS patch lifecycle management with rapid response"; Status = "Unknown" }
+            )
         }
         'MultiFactor' = @{
-            1 = 'Basic MFA for privileged accounts'
-            2 = 'MFA for all users'
-            3 = 'Phishing-resistant MFA (FIDO2, WHfB) for all users'
+            1 = @(
+                @{ Name = "MFA for privileged users"; Description = "Multi-factor authentication required for administrative accounts"; Status = "Unknown" },
+                @{ Name = "MFA for remote access"; Description = "MFA enforcement for remote and external access"; Status = "Unknown" },
+                @{ Name = "Basic multi-factor authentication"; Description = "Fundamental MFA implementation via Conditional Access"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "MFA for all users"; Description = "Multi-factor authentication required for all user accounts"; Status = "Unknown" },
+                @{ Name = "Comprehensive MFA coverage"; Description = "MFA policies covering all users and access scenarios"; Status = "Unknown" },
+                @{ Name = "MFA for important data access"; Description = "MFA required for accessing sensitive data repositories"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Phishing-resistant MFA"; Description = "Implementation of phishing-resistant authentication methods"; Status = "Unknown" },
+                @{ Name = "FIDO2 or Windows Hello"; Description = "FIDO2 security keys or Windows Hello for Business deployed"; Status = "Unknown" },
+                @{ Name = "Certificate-based authentication"; Description = "PKI-based authentication methods implemented"; Status = "Unknown" }
+            )
         }
         'RegularBackups' = @{
-            1 = 'Basic backup procedures in place'
-            2 = 'Daily backups with offsite storage'
-            3 = 'Tested backup recovery and business continuity procedures'
+            1 = @(
+                @{ Name = "Regular backup schedule"; Description = "Consistent backup schedule implemented and maintained"; Status = "Unknown" },
+                @{ Name = "Backup verification process"; Description = "Regular verification of backup integrity and completeness"; Status = "Unknown" },
+                @{ Name = "Basic backup implementation"; Description = "Fundamental backup solution covering critical data"; Status = "Unknown" }
+            )
+            2 = @(
+                @{ Name = "Isolated backup storage"; Description = "Backups stored in isolated environments"; Status = "Unknown" },
+                @{ Name = "Backup integrity testing"; Description = "Regular testing of backup restoration capabilities"; Status = "Unknown" },
+                @{ Name = "Enhanced backup security"; Description = "Advanced security measures protecting backup data"; Status = "Unknown" }
+            )
+            3 = @(
+                @{ Name = "Immutable backups"; Description = "Write-once, read-many backup storage implemented"; Status = "Unknown" },
+                @{ Name = "Air-gapped backup copies"; Description = "Offline backup copies stored in air-gapped environments"; Status = "Unknown" },
+                @{ Name = "Advanced backup protection"; Description = "Comprehensive backup protection against all threat scenarios"; Status = "Unknown" }
+            )
         }
     }
     
-    return $requirements[$Strategy][$Level]
+    if ($requirements.ContainsKey($Strategy) -and $requirements[$Strategy].ContainsKey($Level)) {
+        return $requirements[$Strategy][$Level]
+    }
+    return @()
+}
+
+function Get-E8CheckStatus {
+    param(
+        [string]$Strategy,
+        [hashtable]$RequirementCheck,
+        [array]$StrategyFindings
+    )
+    
+    $checkName = $RequirementCheck.Name
+    $description = $RequirementCheck.Description
+    
+    # Analyze findings to determine status for this specific check
+    $relevantFindings = $StrategyFindings | Where-Object { 
+        $_ -like "*$($checkName.Split(' ')[0])*" -or 
+        $_ -like "*$($checkName.Split(' ')[1])*" -or
+        $_ -like "*$($description.Split(' ')[0])*"
+    }
+    
+    if ($relevantFindings | Where-Object { $_ -like "*✓*" }) {
+        return "Achieved"
+    } elseif ($relevantFindings | Where-Object { $_ -like "*⚠*" }) {
+        return "Partial"
+    } elseif ($relevantFindings | Where-Object { $_ -like "*✗*" }) {
+        return "Missing"
+    } else {
+        return "Unknown"
+    }
 }
 
 function Generate-Basic-Essential8Content {
