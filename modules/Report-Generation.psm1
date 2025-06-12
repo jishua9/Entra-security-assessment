@@ -98,6 +98,103 @@ function Calculate-RiskScore {
     }
 }
 
+function Generate-Essential8Content {
+    Write-Host "Generating Essential 8 compliance content..." -ForegroundColor Yellow
+    
+    # Calculate Essential 8 compliance for each category
+    $essential8Score = Calculate-Essential8Score
+    $categoryCards = @()
+    
+    # Define Essential 8 categories with descriptions
+    $essential8Categories = @{
+        'ApplicationControl' = @{
+            'Title' = 'Application Control'
+            'Description' = 'Prevent execution of unapproved/malicious programs including .exe, DLL, scripts, installers, compiled HTML, HTML applications and control panel applets on workstations.'
+        }
+        'PatchApplications' = @{
+            'Title' = 'Patch Applications'
+            'Description' = 'Update applications with security vulnerabilities within two weeks of release, or within 48 hours if being actively exploited.'
+        }
+        'OfficeMacroSettings' = @{
+            'Title' = 'Configure Microsoft Office Macro Settings'
+            'Description' = 'Configure Microsoft Office macro settings to block macros from the internet, and only allow vetted macros either in trusted locations with limited write access or digitally signed with a trusted certificate.'
+        }
+        'UserApplicationHardening' = @{
+            'Title' = 'User Application Hardening'
+            'Description' = 'Configure web browsers to block Flash, ads, Java on the internet. Disable unneeded features. Configure PDF viewers, Microsoft Office, web browsers and other internet-facing applications to open files in protected view or equivalent sandbox environment.'
+        }
+        'RestrictAdminPrivileges' = @{
+            'Title' = 'Restrict Administrative Privileges'
+            'Description' = 'Restrict administrative privileges to operating systems and applications based on user duties. Regularly validate the requirement for privileges. Do not use privileged accounts for reading email and web browsing.'
+        }
+        'PatchOperatingSystems' = @{
+            'Title' = 'Patch Operating Systems'
+            'Description' = 'Update operating systems with security vulnerabilities within two weeks of release, or within 48 hours if being actively exploited.'
+        }
+        'MultiFactor' = @{
+            'Title' = 'Multi-Factor Authentication'
+            'Description' = 'Multi-factor authentication including for VPNs, RDP, SSH and other remote access, and for all users when they perform a privileged action or access an important (sensitive/high-availability) data repository.'
+        }
+        'RegularBackups' = @{
+            'Title' = 'Regular Backups'
+            'Description' = 'Backup important new/changed data, software and configuration settings, preferably automatically and at least daily, and ensure backups are disconnected, offline or online but immutable.'
+        }
+    }
+    
+    foreach ($categoryKey in $essential8Categories.Keys) {
+        $category = $essential8Categories[$categoryKey]
+        $status = if ($essential8Score.CategoryScores.ContainsKey($categoryKey)) { 
+            $essential8Score.CategoryScores[$categoryKey] 
+        } else { 
+            "Non-Compliant" 
+        }
+        
+        $statusClass = switch ($status) {
+            "Compliant" { "compliant" }
+            "Partially Compliant" { "partial" }
+            default { "non-compliant" }
+        }
+        
+        # Get findings for this category
+        $categoryFindings = @()
+        foreach ($severity in @('Critical', 'High', 'Medium', 'Low', 'Good', 'Info')) {
+            $findings = $Global:AssessmentResults[$severity] | Where-Object { $_.Category -like "*Essential 8*" -and $_.Category -like "*$($category.Title)*" }
+            foreach ($finding in $findings) {
+                $categoryFindings += $finding.Finding
+            }
+        }
+        
+        # Limit findings display to avoid clutter
+        $displayFindings = $categoryFindings | Select-Object -First 3
+        $findingsHtml = ""
+        if ($displayFindings.Count -gt 0) {
+            $findingsHtml = "<ul class='e8-findings-list'>"
+            foreach ($finding in $displayFindings) {
+                $findingsHtml += "<li>$finding</li>"
+            }
+            if ($categoryFindings.Count -gt 3) {
+                $findingsHtml += "<li style='color: #64748b; font-style: italic;'>... and $($categoryFindings.Count - 3) more findings</li>"
+            }
+            $findingsHtml += "</ul>"
+        } else {
+            $findingsHtml = "<ul class='e8-findings-list'><li style='color: #64748b; font-style: italic;'>No specific findings recorded</li></ul>"
+        }
+        
+        $categoryCards += @"
+                <div class="essential8-card">
+                    <div class="e8-card-header">
+                        <div class="e8-card-title">$($category.Title)</div>
+                        <div class="e8-status-badge $statusClass">$status</div>
+                    </div>
+                    <div class="e8-card-description">$($category.Description)</div>
+                    $findingsHtml
+                </div>
+"@
+    }
+    
+    return $categoryCards -join "`n"
+}
+
 function Generate-KeyInsights {
     $insights = @()
     $totalUsers = ($Global:AssessmentResults.Info | Where-Object { $_.Category -eq "MFA" -and $_.Finding -like "*Total active users*" }).Finding
@@ -480,7 +577,7 @@ function Generate-HtmlReport {
                 <div class="table-header">
                     <div class="table-title">$displayName Findings</div>
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <span class="findings-count">$($Global:AssessmentResults[$severity].Count)</span>
+                        <span class="findings-count">$($standardFindings.Count)</span>
                         <button class="expand-toggle" onclick="toggleTable('$tableId')" data-table="$tableId" data-severity="$severity">
                             <span class="expand-icon">▶</span>
                         </button>
@@ -499,7 +596,7 @@ function Generate-HtmlReport {
                         <tbody>
 "@
             
-            foreach ($finding in $Global:AssessmentResults[$severity]) {
+            foreach ($finding in $standardFindings) {
                 $severityColor = switch ($severity) {
                     'Critical' { '#dc2626' }
                     'High' { '#ea580c' }
@@ -565,6 +662,8 @@ function Generate-HtmlReport {
     $html = $html -replace '{{GOOD_COUNT}}', $Global:AssessmentResults.Good.Count
     $html = $html -replace '{{INSIGHTS_CONTENT}}', $insights
     $html = $html -replace '{{TOP_RECOMMENDATIONS}}', $topRecommendations
+    $html = $html -replace '{{ESSENTIAL8_SCORE}}', $essential8Score.CompliancePercentage
+    $html = $html -replace '{{ESSENTIAL8_CONTENT}}', $essential8Content
     $html = $html -replace '{{FINDINGS_CONTENT}}', $findingsContent
     
     # Write to file
