@@ -751,28 +751,100 @@ function Test-SignInLogs {
 }
 
 function Calculate-RiskScore {
-    $totalFindings = $script:AssessmentResults.Critical.Count + $script:AssessmentResults.High.Count + 
-                    $script:AssessmentResults.Medium.Count + $script:AssessmentResults.Low.Count
+    Write-Host "📊 Calculating security risk score..." -ForegroundColor Cyan
     
-    if ($totalFindings -eq 0) {
-        return @{ Score = 100; Level = "EXCELLENT" }
+    # Count findings by severity
+    $criticalCount = $script:AssessmentResults.Critical.Count
+    $highCount = $script:AssessmentResults.High.Count
+    $mediumCount = $script:AssessmentResults.Medium.Count
+    $lowCount = $script:AssessmentResults.Low.Count
+    $goodCount = $script:AssessmentResults.Good.Count
+    
+    $totalFindings = $criticalCount + $highCount + $mediumCount + $lowCount
+    
+    Write-Host "  Critical Issues: $criticalCount" -ForegroundColor Red
+    Write-Host "  High Priority: $highCount" -ForegroundColor Magenta
+    Write-Host "  Medium Priority: $mediumCount" -ForegroundColor Yellow
+    Write-Host "  Low Priority: $lowCount" -ForegroundColor Cyan
+    Write-Host "  Good Practices: $goodCount" -ForegroundColor Green
+    
+    # Start with base score of 100
+    $baseScore = 100
+    
+    # More realistic weighted deductions based on security impact
+    # Critical issues are severe security risks but shouldn't destroy the score
+    $criticalDeduction = $criticalCount * 12
+    # High issues are significant risks
+    $highDeduction = $highCount * 8
+    # Medium issues are moderate risks
+    $mediumDeduction = $mediumCount * 4
+    # Low issues are minor improvements
+    $lowDeduction = $lowCount * 2
+    
+    $totalDeductions = $criticalDeduction + $highDeduction + $mediumDeduction + $lowDeduction
+    
+    # Calculate base score after deductions (minimum 20 to avoid extremely low scores)
+    $score = [Math]::Max(20, $baseScore - $totalDeductions)
+    
+    # Add significant bonus points for good practices (up to 20 points)
+    $goodBonus = [Math]::Min(20, $goodCount * 3)
+    $score = [Math]::Min(100, $score + $goodBonus)
+    
+    # Apply a "real-world adjustment" - most organizations should score 40+ if they have basic security
+    if ($totalFindings -le 10 -and $criticalCount -eq 0) {
+        $score = [Math]::Max($score, 60)  # Minimum 60 for low-finding environments
+    }
+    if ($criticalCount -eq 0 -and $highCount -le 2) {
+        $score = [Math]::Max($score, 50)  # Minimum 50 for environments without critical issues
     }
     
-    # Weighted scoring: Critical = 25 points, High = 15, Medium = 8, Low = 3
-    $totalDeductions = ($script:AssessmentResults.Critical.Count * 25) + 
-                      ($script:AssessmentResults.High.Count * 15) + 
-                      ($script:AssessmentResults.Medium.Count * 8) + 
-                      ($script:AssessmentResults.Low.Count * 3)
-    
-    $score = [Math]::Max(0, 100 - $totalDeductions)
-    
-    $level = if ($score -ge 90) { "EXCELLENT" }
-            elseif ($score -ge 75) { "GOOD" }
-            elseif ($score -ge 60) { "FAIR" }
-            elseif ($score -ge 40) { "POOR" }
+    # Determine risk level with more realistic thresholds
+    $level = if ($score -ge 85) { "EXCELLENT" }
+            elseif ($score -ge 70) { "GOOD" }
+            elseif ($score -ge 55) { "FAIR" }
+            elseif ($score -ge 40) { "NEEDS IMPROVEMENT" }
+            elseif ($score -ge 25) { "POOR" }
             else { "CRITICAL" }
     
-    return @{ Score = $score; Level = $level }
+    # Provide context
+    $context = switch ($level) {
+        "EXCELLENT" { "Outstanding security posture - industry leading practices" }
+        "GOOD" { "Strong security posture with room for optimization" }
+        "FAIR" { "Solid security foundation with some gaps to address" }
+        "NEEDS IMPROVEMENT" { "Basic security in place but important improvements needed" }
+        "POOR" { "Significant security gaps require attention" }
+        "CRITICAL" { "Major security vulnerabilities need immediate action" }
+    }
+    
+    Write-Host "  Security Score: $score/100 ($level)" -ForegroundColor $(
+        switch ($level) {
+            "EXCELLENT" { "Green" }
+            "GOOD" { "Green" }
+            "FAIR" { "Yellow" }
+            "NEEDS IMPROVEMENT" { "Yellow" }
+            "POOR" { "Magenta" }
+            "CRITICAL" { "Red" }
+        }
+    )
+    Write-Host "  Assessment: $context" -ForegroundColor Gray
+    
+    return @{ 
+        Score = $score
+        Level = $level
+        Context = $context
+        Breakdown = @{
+            Critical = $criticalCount
+            High = $highCount
+            Medium = $mediumCount
+            Low = $lowCount
+            Good = $goodCount
+            CriticalDeduction = $criticalDeduction
+            HighDeduction = $highDeduction
+            MediumDeduction = $mediumDeduction
+            LowDeduction = $lowDeduction
+            GoodBonus = $goodBonus
+        }
+    }
 }
 
 function Generate-KeyInsights {
@@ -784,22 +856,22 @@ function Generate-KeyInsights {
     
     if ($totalUsers) {
         $userCount = ($totalUsers -split ': ')[1]
-        $insights += "<div class='insight-item'><div class='insight-value'>$userCount</div><div class='insight-label'>Active Users</div></div>"
+        $insights += "<div class='insight-card'><div class='insight-number'>$userCount</div><div class='insight-label'>Active Users</div></div>"
     }
     
     if ($totalApps) {
         $appCount = ($totalApps -split ' ')[0]
-        $insights += "<div class='insight-item'><div class='insight-value'>$appCount</div><div class='insight-label'>Applications</div></div>"
+        $insights += "<div class='insight-card'><div class='insight-number'>$appCount</div><div class='insight-label'>Applications</div></div>"
     }
     
     if ($totalDevices) {
         $deviceCount = ($totalDevices -split ' ')[0]
-        $insights += "<div class='insight-item'><div class='insight-value'>$deviceCount</div><div class='insight-label'>Registered Devices</div></div>"
+        $insights += "<div class='insight-card'><div class='insight-number'>$deviceCount</div><div class='insight-label'>Registered Devices</div></div>"
     }
     
     if ($totalPolicies) {
         $policyCount = ($totalPolicies -split ' ')[0]
-        $insights += "<div class='insight-item'><div class='insight-value'>$policyCount</div><div class='insight-label'>CA Policies</div></div>"
+        $insights += "<div class='insight-card'><div class='insight-number'>$policyCount</div><div class='insight-label'>CA Policies</div></div>"
     }
     
     return $insights -join "`n"
@@ -854,72 +926,95 @@ function Generate-HtmlReport {
     # Generate insights
     $insights = Generate-KeyInsights
     
-    # Generate findings content
+    # Generate findings content as tables
     $findingsContent = ""
     
     foreach ($severity in @('Critical', 'High', 'Medium', 'Low', 'Good', 'Info')) {
         if ($script:AssessmentResults[$severity].Count -gt 0) {
-            $sectionId = "section-$($severity.ToLower())"
+            $displayName = switch ($severity) {
+                'Critical' { 'Critical Priority' }
+                'High' { 'High Priority' }
+                'Medium' { 'Medium Priority' }
+                'Low' { 'Low Priority' }
+                'Good' { 'Good Practices' }
+                'Info' { 'Information' }
+            }
+            
+            $tableId = "table-$($severity.ToLower())"
             $findingsContent += @"
-            <div class="findings-section">
-                <div class="section-header" data-section="$sectionId" data-severity="$severity" onclick="toggleSection('$sectionId')">
-                    <div>
-                        <span class="section-title">$severity Priority Findings</span>
-                    </div>
-                    <div>
-                        <span class="section-count">$($script:AssessmentResults[$severity].Count)</span>
-                        <span class="expand-icon">▶</span>
+            <div class="findings-table">
+                <div class="table-header">
+                    <div class="table-title">$displayName Findings</div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span class="findings-count">$($script:AssessmentResults[$severity].Count)</span>
+                        <button class="expand-toggle" onclick="toggleTable('$tableId')" data-table="$tableId" data-severity="$severity">
+                            <span class="expand-icon">▶</span>
+                        </button>
                     </div>
                 </div>
-                <div class="section-content" id="$sectionId">
+                <div class="table-content" id="$tableId">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Title</th>
+                                <th style="width: 10%;">Severity</th>
+                                <th style="width: 35%;">Warning</th>
+                                <th style="width: 30%;">Recommendations</th>
+                            </tr>
+                        </thead>
+                        <tbody>
 "@
             
             foreach ($finding in $script:AssessmentResults[$severity]) {
+                $severityColor = switch ($severity) {
+                    'Critical' { '#dc2626' }
+                    'High' { '#ea580c' }
+                    'Medium' { '#d97706' }
+                    'Low' { '#2563eb' }
+                    'Good' { '#059669' }
+                    'Info' { '#6b7280' }
+                }
+                
+                $warningText = "$($finding.Category): $($finding.Finding)"
+                if ($finding.Details) {
+                    $warningText += " " + $finding.Details
+                }
+                
+                $recommendationText = ""
+                if ($finding.Recommendation) {
+                    $recommendationText += "<strong>Recommendation:</strong> " + $finding.Recommendation
+                }
+                
                 $remediationActions = Generate-RemediationActions -Finding $finding
+                if ($remediationActions) {
+                    if ($recommendationText) { $recommendationText += "<br><br>" }
+                    $recommendationText += "<strong>Remediation:</strong> " + $remediationActions
+                }
                 
                 $findingsContent += @"
-                <div class="finding $($severity.ToLower())" style="border-left-color: $(
-                    switch ($severity) {
-                        'Critical' { '#e74c3c' }
-                        'High' { '#e91e63' }
-                        'Medium' { '#f39c12' }
-                        'Low' { '#3498db' }
-                        'Good' { '#27ae60' }
-                        'Info' { '#6c757d' }
-                    }
-                );">
-                    <div class="finding-header">
-                        <span class="severity-badge $($severity.ToLower())">$severity</span>
-                    </div>
-                    <div class="finding-title">$($finding.Category): $($finding.Finding)</div>
+                            <tr>
+                                <td>
+                                    <div class="finding-title">$($finding.Category)</div>
+                                </td>
+                                <td>
+                                    <span class="severity-badge $($severity.ToLower())" style="background-color: $severityColor;">$severity</span>
+                                </td>
+                                <td>
+                                    <div class="finding-description">$warningText</div>
+                                </td>
+                                <td>
+                                    <div class="recommendation-text">$recommendationText</div>
+                                </td>
+                            </tr>
 "@
-                
-                if ($finding.Recommendation) {
-                    $findingsContent += @"
-                    <div class="recommendation">
-                        <div class="recommendation-title">💡 Recommendation</div>
-                        $($finding.Recommendation)
-                    </div>
-"@
-                }
-                
-                if ($finding.Details) {
-                    $findingsContent += "<div class='details'>ℹ️ $($finding.Details)</div>"
-                }
-                
-                if ($remediationActions) {
-                    $findingsContent += @"
-                    <div class="remediation-actions">
-                        <div class="remediation-title">🔧 Remediation Actions</div>
-                        <div class="powershell-command">$remediationActions</div>
-                    </div>
-"@
-                }
-                
-                $findingsContent += "</div>"
             }
             
-            $findingsContent += "</div></div>"
+            $findingsContent += @"
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+"@
         }
     }
     
