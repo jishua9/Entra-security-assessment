@@ -14,7 +14,7 @@
 #>
 
 param(
-    [string]$OutputPath = ".\Azure-Entra-Security-Report.html",
+    [string]$OutputPath = "",
     [switch]$DetailedOutput
 )
 
@@ -182,6 +182,10 @@ function Connect-ToAzureServices {
         $tenantInfo = Get-AzTenant | Select-Object -First 1
         if ($tenantInfo) {
             Write-Host "Tenant: $($tenantInfo.Name) ($($tenantInfo.Id))" -ForegroundColor Green
+            
+            # Store tenant info globally for report generation
+            $script:TenantName = $tenantInfo.Name
+            $script:TenantId = $tenantInfo.Id
         }
         
     }
@@ -1346,8 +1350,9 @@ function Generate-HtmlReport {
     }
     
     # Replace template placeholders
+    $tenantDisplayName = if ($script:TenantName) { $script:TenantName } else { "Unknown Tenant" }
     $html = $template -replace '{{TIMESTAMP}}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-    $html = $html -replace '{{TENANT_NAME}}', $tenantName
+    $html = $html -replace '{{TENANT_NAME}}', $tenantDisplayName
     $html = $html -replace '{{RISK_SCORE}}', $riskData.Score
     $html = $html -replace '{{RISK_LEVEL}}', $riskData.Level
     $html = $html -replace '{{CRITICAL_COUNT}}', $script:AssessmentResults.Critical.Count
@@ -1405,6 +1410,37 @@ function Generate-BasicHtmlReport {
     $html | Out-File -FilePath $OutputPath -Encoding UTF8
 }
 
+function Get-DynamicOutputPath {
+    param(
+        [string]$CustomPath = ""
+    )
+    
+    # If user provided a custom path, use it
+    if ($CustomPath -and $CustomPath -ne "") {
+        return $CustomPath
+    }
+    
+    # Get current date in a safe filename format
+    $dateString = Get-Date -Format "yyyy-MM-dd"
+    
+    # Get tenant name and sanitize for filename
+    $tenantName = if ($script:TenantName) {
+        # Remove invalid filename characters and limit length
+        $sanitized = $script:TenantName -replace '[<>:"/\\|?*]', '-'
+        $sanitized = $sanitized -replace '\s+', '-'  # Replace spaces with hyphens
+        $sanitized = $sanitized.Substring(0, [Math]::Min($sanitized.Length, 50))  # Limit length
+        $sanitized.Trim('-')  # Remove leading/trailing hyphens
+    } else {
+        "Unknown-Tenant"
+    }
+    
+    # Create filename: TenantName_Azure-Entra-Security-Report_YYYY-MM-DD.html
+    $filename = "${tenantName}_Azure-Entra-Security-Report_${dateString}.html"
+    
+    # Return full path
+    return Join-Path (Get-Location) $filename
+}
+
 function Show-Summary {
     Write-Host "`n" + "="*80 -ForegroundColor Cyan
     Write-Host "AZURE ENTRA SECURITY ASSESSMENT SUMMARY" -ForegroundColor Cyan
@@ -1431,7 +1467,7 @@ function Show-Summary {
     }
     
     Write-Host "`nNext Steps:" -ForegroundColor White
-    Write-Host "  1. Review the detailed HTML report: $OutputPath" -ForegroundColor Gray
+    Write-Host "  1. Review the detailed HTML report: $script:FinalOutputPath" -ForegroundColor Gray
     Write-Host "  2. Address critical and high priority findings first" -ForegroundColor Gray
     Write-Host "  3. Implement recommended security improvements" -ForegroundColor Gray
     Write-Host "  4. Schedule regular security assessments" -ForegroundColor Gray
@@ -1455,6 +1491,10 @@ function Start-SecurityAssessment {
         return
     }
     
+    # Generate dynamic output path after we have tenant information
+    $script:FinalOutputPath = Get-DynamicOutputPath -CustomPath $OutputPath
+    Write-Host "`nReport will be saved as: $script:FinalOutputPath" -ForegroundColor Gray
+    
     # Run security assessments
     Test-SecurityDefaults
     Test-ConditionalAccessPolicies
@@ -1469,7 +1509,7 @@ function Start-SecurityAssessment {
     Test-SignInLogs
     
     # Generate reports
-    Generate-HtmlReport -OutputPath $OutputPath
+    Generate-HtmlReport -OutputPath $script:FinalOutputPath
     Show-Summary
     
     Write-Host "`nSecurity assessment completed successfully!" -ForegroundColor Green
