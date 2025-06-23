@@ -370,7 +370,7 @@
         }
 
         .rec-priority.critical {
-            background-color: #dc2626;
+            background-color: #6f00ca;
             color: white;
         }
 
@@ -638,6 +638,14 @@
             margin-bottom: 6px;
             flex-wrap: wrap;
             gap: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        .check-header:hover {
+            background-color: rgba(51, 65, 85, 0.3);
         }
 
         .check-status-icon {
@@ -667,12 +675,84 @@
         .check-status.check-partial { background: #d97706; color: white; }
         .check-status.check-missing { background: #dc2626; color: white; }
         .check-status.check-unknown { background: #475569; color: white; }
+        .check-status.check-not-assessed { background: #6b7280; color: white; }
+        .check-status.check-needs-review { background: #7c3aed; color: white; }
 
         .check-description {
             font-size: 11px;
             color: #94a3b8;
             line-height: 1.4;
             margin-left: 22px;
+        }
+
+        .check-expand-icon {
+            font-size: 10px;
+            color: #64748b;
+            margin-left: auto;
+            transition: transform 0.2s ease;
+            cursor: pointer;
+        }
+
+        .check-expand-icon.rotated {
+            transform: rotate(90deg);
+        }
+
+        .check-details {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(51, 65, 85, 0.6);
+            display: none;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        .check-details.expanded {
+            display: block;
+        }
+
+        .check-details h6 {
+            color: #fb923c;
+            font-size: 10px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .check-details p {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+
+        .check-finding,
+        .check-details-info,
+        .check-recommendation {
+            margin-bottom: 12px;
+        }
+
+        .remediation-steps {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 8px;
+        }
+
+        .remediation-steps h6 {
+            color: #10b981;
+            margin-bottom: 8px;
+        }
+
+        .remediation-steps ol {
+            margin: 0;
+            padding-left: 16px;
+            color: #e2e8f0;
+        }
+
+        .remediation-steps li {
+            font-size: 11px;
+            line-height: 1.4;
+            margin-bottom: 4px;
         }
 
         .maturity-summary {
@@ -1274,6 +1354,20 @@
             } else {
                 document.getElementById('maturity-' + level).classList.add('active');
                 document.getElementById('toggle-' + level).classList.add('active');
+            }
+        }
+
+        // Toggle check details in Essential 8 section
+        function toggleCheckDetails(element) {
+            const checkItem = element.closest('.check-item');
+            const details = checkItem.querySelector('.check-details');
+            const icon = element.querySelector('.check-expand-icon');
+            
+            if (details) {
+                details.classList.toggle('expanded');
+                if (icon) {
+                    icon.classList.toggle('rotated');
+                }
             }
         }
 

@@ -269,23 +269,59 @@ function Generate-E8MaturityContent {
                         'Achieved' { '✅' }
                         'Partial' { '⚠️' }
                         'Missing' { '❌' }
+                        'Not Assessed' { '⏸️' }
+                        'Needs Review' { '🔍' }
                         default { '❓' }
                     }
                     $statusColorClass = switch ($checkStatus) {
                         'Achieved' { 'check-achieved' }
                         'Partial' { 'check-partial' }
                         'Missing' { 'check-missing' }
+                        'Not Assessed' { 'check-not-assessed' }
+                        'Needs Review' { 'check-needs-review' }
                         default { 'check-unknown' }
+                    }
+                    
+                    # Get detailed information for this check
+                    $checkDetails = Get-E8CheckDetails -Strategy $key -RequirementCheck $check -StrategyFindings $strategyFindings -Status $checkStatus
+                    
+                    # Format remediation steps if available
+                    $remediationHtml = ""
+                    if ($checkDetails.Remediation) {
+                        $remediationSteps = $checkDetails.Remediation -split "`n"
+                        $remediationHtml = "<div class='remediation-steps'><h6>Remediation Steps:</h6><ol>"
+                        foreach ($step in $remediationSteps) {
+                            if ($step.Trim()) {
+                                $remediationHtml += "<li>$($step.Trim())</li>"
+                            }
+                        }
+                        $remediationHtml += "</ol></div>"
                     }
                     
                     $checksHtml += @"
                     <div class="check-item">
-                        <div class="check-header">
+                        <div class="check-header" onclick="toggleCheckDetails(this)">
                             <span class="check-status-icon">$statusIcon</span>
                             <span class="check-name">$($check.Name)</span>
                             <span class="check-status $statusColorClass">$checkStatus</span>
+                            <span class="check-expand-icon">▶</span>
                         </div>
                         <div class="check-description">$($check.Description)</div>
+                        <div class="check-details">
+                            <div class="check-finding">
+                                <h6>Finding:</h6>
+                                <p>$($checkDetails.Finding)</p>
+                            </div>
+                            <div class="check-details-info">
+                                <h6>Details:</h6>
+                                <p>$($checkDetails.Details)</p>
+                            </div>
+                            <div class="check-recommendation">
+                                <h6>Recommendation:</h6>
+                                <p>$($checkDetails.Recommendation)</p>
+                            </div>
+                            $remediationHtml
+                        </div>
                     </div>
 "@
                 }
@@ -469,21 +505,89 @@ function Get-E8CheckStatus {
     $checkName = $RequirementCheck.Name
     $description = $RequirementCheck.Description
     
-    # Analyze findings to determine status for this specific check
-    $relevantFindings = $StrategyFindings | Where-Object { 
-        $_ -like "*$($checkName.Split(' ')[0])*" -or 
-        $_ -like "*$($checkName.Split(' ')[1])*" -or
-        $_ -like "*$($description.Split(' ')[0])*"
+    # Define comprehensive keyword mappings for better matching
+    $keywordMappings = @{
+        'Application control implemented on workstations' = @('application control', 'WDAC', 'AppLocker', 'workstation', 'policies configured')
+        'Allowlist-based application execution' = @('allowlist', 'whitelist', 'application execution', 'approved applications')
+        'Application control policies active' = @('policies active', 'policies deployed', 'application control')
+        'Application control extended to internet-facing servers' = @('server', 'internet-facing', 'server-specific', 'server policies')
+        'Comprehensive application allowlisting' = @('comprehensive', 'allowlist', 'detailed allowlist')
+        'Server application policies configured' = @('server', 'policies configured', 'server environments')
+        'Automated asset discovery implemented' = @('asset discovery', 'automated', 'inventory', 'managed apps', 'devices')
+        'Application inventory maintained' = @('inventory', 'application', 'managed apps')
+        'Vulnerability scanning configured' = @('vulnerability', 'scanning', 'assessment')
+        'Patch management for critical vulnerabilities' = @('patch management', 'critical', 'vulnerabilities', 'update')
+        'Windows Update for Business policies' = @('Windows Update', 'WUfB', 'update policies', 'business policies')
+        'Automated patch deployment' = @('automated', 'patch', 'deployment', 'update')
+        'Expedited patch deployment (48-hour)' = @('expedited', '48', 'critical patch', 'rapid')
+        'Update rings for critical patches' = @('update rings', 'rings', 'expedited', 'critical')
+        'Office macro execution restricted' = @('macro', 'Office', 'execution', 'restricted')
+        'Only signed macros allowed' = @('signed', 'macro', 'digital signature')
+        'Macro security policies configured' = @('macro', 'security', 'policies')
+        'Web browser security hardening' = @('browser', 'hardening', 'security')
+        'Flash and Java disabled' = @('Flash', 'Java', 'disabled', 'plugins')
+        'Basic application hardening' = @('application', 'hardening', 'security')
+        'Privileged accounts identified' = @('privileged', 'accounts', 'identified', 'admin')
+        'Admin rights restricted' = @('admin', 'rights', 'restricted', 'privileges')
+        'Basic privilege management' = @('privilege', 'management', 'admin')
+        'Privileged access management implemented' = @('PAM', 'privileged access', 'management')
+        'Just-in-time access configured' = @('JIT', 'just-in-time', 'access')
+        'OS asset discovery implemented' = @('OS', 'asset discovery', 'operating system', 'inventory')
+        'Operating system inventory' = @('OS', 'inventory', 'operating system', 'versions')
+        'Vulnerability scanning for OS' = @('OS', 'vulnerability', 'scanning', 'operating system')
+        'OS patch management configured' = @('OS', 'patch management', 'operating system', 'update')
+        'Critical vulnerability patching' = @('critical', 'vulnerability', 'patching', 'OS')
+        'Automated OS updates' = @('automated', 'OS', 'updates', 'operating system')
+        'MFA for privileged users' = @('MFA', 'privileged', 'admin', 'multi-factor')
+        'MFA for remote access' = @('MFA', 'remote', 'access', 'external')
+        'Basic multi-factor authentication' = @('MFA', 'multi-factor', 'authentication', 'Conditional Access')
+        'MFA for all users' = @('MFA', 'all users', 'comprehensive', 'everyone')
+        'Comprehensive MFA coverage' = @('comprehensive', 'MFA', 'coverage', 'all users')
+        'MFA for important data access' = @('MFA', 'important data', 'sensitive', 'data access')
+        'Phishing-resistant MFA' = @('phishing-resistant', 'FIDO2', 'Windows Hello', 'certificate')
+        'FIDO2 or Windows Hello' = @('FIDO2', 'Windows Hello', 'WHfB', 'security keys')
+        'Certificate-based authentication' = @('certificate', 'PKI', 'X509', 'authentication')
+        'Regular backup schedule' = @('backup', 'schedule', 'regular', 'daily')
+        'Backup verification process' = @('backup', 'verification', 'integrity', 'testing')
+        'Basic backup implementation' = @('backup', 'implementation', 'solution')
     }
     
-    if ($relevantFindings | Where-Object { $_ -like "*✓*" }) {
+    # Get keywords for this specific check
+    $checkKeywords = $keywordMappings[$checkName]
+    if (-not $checkKeywords) {
+        # Fallback to simple word extraction if no specific mapping
+        $checkKeywords = $checkName.Split(' ') | Where-Object { $_.Length -gt 3 }
+    }
+    
+    # Find relevant findings using multiple keyword matching
+    $relevantFindings = @()
+    foreach ($finding in $StrategyFindings) {
+        $matchCount = 0
+        foreach ($keyword in $checkKeywords) {
+            if ($finding -like "*$keyword*") {
+                $matchCount++
+            }
+        }
+        # Consider it relevant if at least 2 keywords match or 1 very specific keyword
+        if ($matchCount -ge 2 -or ($matchCount -ge 1 -and $checkKeywords.Count -le 2)) {
+            $relevantFindings += $finding
+        }
+    }
+    
+    # Determine status based on findings
+    if ($relevantFindings | Where-Object { $_ -like "*✓*" -or $_ -like "*Level 1*" -or $_ -like "*Level 2*" -or $_ -like "*Level 3*" }) {
         return "Achieved"
-    } elseif ($relevantFindings | Where-Object { $_ -like "*⚠*" }) {
+    } elseif ($relevantFindings | Where-Object { $_ -like "*⚠*" -or $_ -like "*Unable*" -or $_ -like "*Limited*" }) {
         return "Partial"
-    } elseif ($relevantFindings | Where-Object { $_ -like "*✗*" }) {
+    } elseif ($relevantFindings | Where-Object { $_ -like "*✗*" -or $_ -like "*not found*" -or $_ -like "*not configured*" -or $_ -like "*not implemented*" }) {
         return "Missing"
     } else {
-        return "Unknown"
+        # Provide more context for Unknown status
+        if ($relevantFindings.Count -eq 0) {
+            return "Not Assessed"
+        } else {
+            return "Needs Review"
+        }
     }
 }
 
@@ -1151,6 +1255,188 @@ function Show-Summary {
     # Essential 8 compliance section will be added by main script
 }
 
+function Get-E8CheckDetails {
+    param(
+        [string]$Strategy,
+        [hashtable]$RequirementCheck,
+        [array]$StrategyFindings,
+        [string]$Status
+    )
+    
+    $checkName = $RequirementCheck.Name
+    $description = $RequirementCheck.Description
+    
+    # Define detailed findings, recommendations, and remediations for each check
+    $checkDetails = @{
+        'Application control implemented on workstations' = @{
+            'Achieved' = @{
+                Finding = "Windows Defender Application Control (WDAC) or AppLocker policies are configured and active on workstations"
+                Details = "Application control policies prevent unauthorized executable files from running on workstations"
+                Recommendation = "Continue monitoring policy effectiveness and update allowlists as needed"
+            }
+            'Missing' = @{
+                Finding = "No application control policies found for workstations"
+                Details = "Workstations are vulnerable to malicious executable files and unauthorized software installation"
+                Recommendation = "Implement Windows Defender Application Control (WDAC) policies via Intune device configuration"
+                Remediation = "1. Create WDAC policy in Intune Device Configuration\n2. Configure allowlist for approved applications\n3. Deploy to workstation device groups\n4. Monitor compliance and adjust as needed"
+            }
+            'Partial' = @{
+                Finding = "Application control policies exist but may have limited coverage or enforcement issues"
+                Details = "Some workstations may not be covered by application control policies"
+                Recommendation = "Review and expand application control policy coverage to all workstations"
+                Remediation = "1. Audit current policy assignments\n2. Identify uncovered devices\n3. Expand policy scope\n4. Verify enforcement settings"
+            }
+        }
+        'Allowlist-based application execution' = @{
+            'Achieved' = @{
+                Finding = "Application allowlists are configured to restrict execution to approved applications only"
+                Details = "Only pre-approved applications can execute, blocking unauthorized software"
+                Recommendation = "Regularly review and update allowlists to include new approved applications"
+            }
+            'Missing' = @{
+                Finding = "No application allowlists configured - all applications can execute"
+                Details = "Without allowlists, any application can execute including malicious software"
+                Recommendation = "Configure application allowlists using WDAC or AppLocker policies"
+                Remediation = "1. Inventory approved applications\n2. Create application allowlist policy\n3. Test in audit mode first\n4. Deploy in enforcement mode"
+            }
+        }
+        'MFA for privileged users' = @{
+            'Achieved' = @{
+                Finding = "Multi-factor authentication is enforced for all privileged/administrative accounts"
+                Details = "Administrative accounts require additional authentication factors beyond passwords"
+                Recommendation = "Consider implementing phishing-resistant MFA methods for enhanced security"
+            }
+            'Missing' = @{
+                Finding = "Privileged accounts do not require multi-factor authentication"
+                Details = "Administrative accounts are vulnerable to credential theft and unauthorized access"
+                Recommendation = "Implement Conditional Access policies requiring MFA for privileged roles"
+                Remediation = "1. Create Conditional Access policy\n2. Target privileged directory roles\n3. Require MFA grant control\n4. Enable policy and monitor compliance"
+            }
+        }
+        'MFA for all users' = @{
+            'Achieved' = @{
+                Finding = "Multi-factor authentication is required for all user accounts"
+                Details = "All users must provide additional authentication factors for access"
+                Recommendation = "Monitor MFA adoption rates and provide user training as needed"
+            }
+            'Missing' = @{
+                Finding = "MFA is not required for all users"
+                Details = "User accounts are vulnerable to password-based attacks"
+                Recommendation = "Expand MFA requirements to all users via Conditional Access"
+                Remediation = "1. Create CA policy for all users\n2. Require MFA for all cloud apps\n3. Implement gradual rollout\n4. Provide user training and support"
+            }
+        }
+        'Phishing-resistant MFA' = @{
+            'Achieved' = @{
+                Finding = "Phishing-resistant authentication methods (FIDO2, Windows Hello, certificates) are deployed"
+                Details = "Users have access to authentication methods that resist phishing attacks"
+                Recommendation = "Encourage adoption of phishing-resistant methods and phase out SMS/voice"
+            }
+            'Missing' = @{
+                Finding = "No phishing-resistant MFA methods are available"
+                Details = "Current MFA methods may be vulnerable to sophisticated phishing attacks"
+                Recommendation = "Deploy FIDO2 security keys or Windows Hello for Business"
+                Remediation = "1. Enable FIDO2 in authentication methods policy\n2. Configure Windows Hello for Business\n3. Distribute security keys to users\n4. Update CA policies to prefer strong methods"
+            }
+        }
+        'OS asset discovery implemented' = @{
+            'Achieved' = @{
+                Finding = "Automated discovery and inventory of operating systems is implemented"
+                Details = "Complete visibility into OS versions and patch levels across the environment"
+                Recommendation = "Regularly review inventory data and ensure all devices are enrolled"
+            }
+            'Missing' = @{
+                Finding = "No automated OS asset discovery is configured"
+                Details = "Limited visibility into OS versions and patch status across devices"
+                Recommendation = "Implement device enrollment and inventory via Intune"
+                Remediation = "1. Configure Intune device enrollment\n2. Deploy enrollment policies\n3. Set up automated inventory collection\n4. Create compliance reporting"
+            }
+        }
+        'Windows Update for Business policies' = @{
+            'Achieved' = @{
+                Finding = "Windows Update for Business policies are configured for automated patching"
+                Details = "Operating system updates are managed and deployed automatically"
+                Recommendation = "Review update rings and deployment timelines for optimization"
+            }
+            'Missing' = @{
+                Finding = "No Windows Update for Business policies are configured"
+                Details = "OS updates are not centrally managed, creating security vulnerabilities"
+                Recommendation = "Configure WUfB policies via Intune device configuration"
+                Remediation = "1. Create Windows Update for Business policy\n2. Configure update rings (pilot, broad)\n3. Set deployment timelines\n4. Assign to device groups"
+            }
+        }
+        'Regular backup schedule' = @{
+            'Achieved' = @{
+                Finding = "Regular backup schedules are implemented and maintained"
+                Details = "Critical data is backed up on a consistent schedule"
+                Recommendation = "Test backup restoration procedures regularly"
+            }
+            'Missing' = @{
+                Finding = "No regular backup schedule is configured"
+                Details = "Critical data is at risk of permanent loss in case of incidents"
+                Recommendation = "Implement automated backup policies for critical data"
+                Remediation = "1. Configure OneDrive Known Folder Move\n2. Set up Azure Backup for servers\n3. Implement retention policies\n4. Schedule regular backup testing"
+            }
+        }
+    }
+    
+    # Get specific details for this check and status
+    if ($checkDetails.ContainsKey($checkName) -and $checkDetails[$checkName].ContainsKey($Status)) {
+        return $checkDetails[$checkName][$Status]
+    }
+    
+    # Fallback to generic details based on status
+    switch ($Status) {
+        'Achieved' {
+            return @{
+                Finding = "$checkName is implemented"
+                Details = "This Essential 8 requirement has been successfully implemented"
+                Recommendation = "Continue monitoring and maintaining this implementation"
+            }
+        }
+        'Missing' {
+            return @{
+                Finding = "$checkName is not implemented"
+                Details = "This Essential 8 requirement needs to be implemented to improve security posture"
+                Recommendation = "Implement this requirement according to Essential 8 guidelines"
+                Remediation = "Review Essential 8 documentation and implement appropriate controls"
+            }
+        }
+        'Partial' {
+            return @{
+                Finding = "$checkName is partially implemented"
+                Details = "This requirement has some implementation but may need enhancement"
+                Recommendation = "Review current implementation and address any gaps"
+                Remediation = "Audit current configuration and implement missing components"
+            }
+        }
+        'Not Assessed' {
+            return @{
+                Finding = "$checkName was not assessed"
+                Details = "This requirement could not be automatically assessed"
+                Recommendation = "Perform manual assessment of this requirement"
+                Remediation = "Review configuration manually and document current state"
+            }
+        }
+        'Needs Review' {
+            return @{
+                Finding = "$checkName requires manual review"
+                Details = "Assessment data exists but requires expert interpretation"
+                Recommendation = "Review assessment findings and determine implementation status"
+                Remediation = "Analyze current configuration and make necessary adjustments"
+            }
+        }
+        default {
+            return @{
+                Finding = "$checkName status is unknown"
+                Details = "Unable to determine implementation status"
+                Recommendation = "Investigate current configuration"
+                Remediation = "Review and assess current implementation"
+            }
+        }
+    }
+}
+
 # Export all reporting functions
 Export-ModuleMember -Function @(
     'Calculate-RiskScore',
@@ -1167,5 +1453,6 @@ Export-ModuleMember -Function @(
     'Generate-Enhanced-Essential8MaturityContent',
     'Generate-E8MaturityContent',
     'Get-E8Requirements',
-    'Generate-Basic-Essential8Content'
+    'Generate-Basic-Essential8Content',
+    'Get-E8CheckDetails'
 ) 
